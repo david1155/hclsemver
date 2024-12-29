@@ -49,6 +49,7 @@ func ScanAndUpdateModules(
 	configTiers map[string]bool,
 	strategy version.Strategy,
 	dryRun bool,
+	force bool,
 ) error {
 	err := filepath.WalkDir(workDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -68,7 +69,7 @@ func ScanAndUpdateModules(
 			return nil
 		}
 
-		changed, oldVersion, newVersion, err := UpdateModuleVersionInFile(path, oldSourceSubstr, newIsVer, newVer, newConstr, newInput, strategy, dryRun)
+		changed, oldVersion, newVersion, err := UpdateModuleVersionInFile(path, oldSourceSubstr, newIsVer, newVer, newConstr, newInput, strategy, dryRun, force)
 		if err != nil {
 			return fmt.Errorf("error updating file %s: %w", path, err)
 		}
@@ -126,6 +127,7 @@ func UpdateModuleVersionInFile(
 	newInput string,
 	strategy version.Strategy,
 	dryRun bool,
+	force bool,
 ) (bool, string, string, error) {
 	// 1) Read file
 	src, err := os.ReadFile(filename)
@@ -166,6 +168,10 @@ func UpdateModuleVersionInFile(
 		versionAttr := block.Body().GetAttribute("version")
 		if versionAttr != nil {
 			oldVersion = strings.Trim(strings.TrimSpace(string(versionAttr.Expr().BuildTokens(nil).Bytes())), `"`)
+		} else if !force {
+			// If no version attribute and force is false, output warning and skip
+			fmt.Printf("Warning: Module %q in file %s has no version attribute. Use force flag to add version.\n", sourceValue, filename)
+			continue
 		}
 
 		// Apply version strategy

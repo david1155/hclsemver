@@ -40,6 +40,9 @@ func processConfig(configFile string, workDir string, dryRun bool) error {
 			// Get effective strategy
 			strategy := config.GetEffectiveStrategy(module, tier)
 
+			// Get effective force setting
+			force := config.GetEffectiveForce(module, tier)
+
 			// Parse the version/range
 			newIsVer, newVer, newConstr, err := version.ParseVersionOrRange(versionConfig.Version)
 			if err != nil {
@@ -48,7 +51,7 @@ func processConfig(configFile string, workDir string, dryRun bool) error {
 			}
 
 			rootDir := filepath.Join(workDir, tier)
-			if err := terraform.ScanAndUpdateModules(rootDir, module.Source, newIsVer, newVer, newConstr, versionConfig.Version, configTiers, strategy, dryRun); err != nil {
+			if err := terraform.ScanAndUpdateModules(rootDir, module.Source, newIsVer, newVer, newConstr, versionConfig.Version, configTiers, strategy, dryRun, force); err != nil {
 				log.Printf("Error processing module '%s' in tier '%s': %v", module.Source, tier, err)
 				continue
 			}
