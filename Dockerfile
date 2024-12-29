@@ -16,7 +16,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o hclsemver ./cmd/hclsemver
 
 # Final stage - using scratch (empty) image
-FROM scratch
+FROM alpine:latest
 WORKDIR /app
 COPY --from=builder /app/hclsemver .
 
