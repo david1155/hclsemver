@@ -91,6 +91,29 @@ func ScanAndUpdateModules(
 	return err
 }
 
+// matchModuleSource checks if the source matches the pattern by comparing path segments
+func matchModuleSource(source, pattern string) bool {
+	// Split both strings by forward slash
+	sourceParts := strings.Split(source, "/")
+	patternParts := strings.Split(pattern, "/")
+
+	// For each part in the source
+	for i := 0; i <= len(sourceParts)-len(patternParts); i++ {
+		matched := true
+		// Try to match pattern parts with source parts starting at current position
+		for j := 0; j < len(patternParts); j++ {
+			if sourceParts[i+j] != patternParts[j] {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
+}
+
 // UpdateModuleVersionInFile reads a single .tf file, finds any module blocks
 // whose "source" matches oldSourceSubstr, then updates "version" attribute using
 // "keep old if it fits new, else new" logic. We pass newInput to decideVersionOrRange.
@@ -135,7 +158,7 @@ func UpdateModuleVersionInFile(
 		sourceTokens := sourceAttr.Expr().BuildTokens(nil)
 		sourceValue := strings.Trim(string(sourceTokens.Bytes()), `"`)
 
-		if !strings.Contains(sourceValue, oldSourceSubstr) {
+		if !matchModuleSource(sourceValue, oldSourceSubstr) {
 			continue
 		}
 
