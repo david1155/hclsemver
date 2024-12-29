@@ -90,9 +90,16 @@ func DecideVersionOrRange(
 			return newInput
 		}
 
-		// Find highest versions in both ranges
+		// Find highest and lowest versions in both ranges
 		oldMaxVer := findHighestVersionInRange(oldRange)
 		newMaxVer := findHighestVersionInRange(newRange)
+		oldMinVer := findLowestVersionInRange(oldRange)
+		newMinVer := findLowestVersionInRange(newRange)
+
+		// If old range has higher minimum version than new range, keep old range
+		if oldMinVer != nil && newMinVer != nil && oldMinVer.GreaterThan(newMinVer) {
+			return oldInput
+		}
 
 		// If old range has higher version than new range, keep old range
 		if oldMaxVer != nil && newMaxVer != nil && oldMaxVer.GreaterThan(newMaxVer) {
@@ -132,6 +139,28 @@ func findHighestVersionInRange(c *semver.Constraints) *semver.Version {
 	return highestVer
 }
 
+// findLowestVersionInRange tries to find the lowest version that satisfies the constraints
+func findLowestVersionInRange(c *semver.Constraints) *semver.Version {
+	if c == nil {
+		return nil
+	}
+
+	var lowestVer *semver.Version
+	for major := 0; major <= MAX_MAJOR; major++ {
+		for minor := 0; minor <= MAX_MINOR; minor++ {
+			for patch := 0; patch <= MAX_PATCH; patch++ {
+				testVer, _ := semver.NewVersion(fmt.Sprintf("%d.%d.%d", major, minor, patch))
+				if c.Check(testVer) {
+					if lowestVer == nil || testVer.LessThan(lowestVer) {
+						lowestVer = testVer
+					}
+				}
+			}
+		}
+	}
+	return lowestVer
+}
+
 // RangesOverlap tries some sample versions from 0.0.0..(MAX_MAJOR,MAX_MINOR,MAX_PATCH).
 func RangesOverlap(a, b *semver.Constraints) bool {
 	for major := 0; major <= MAX_MAJOR; major++ {
@@ -148,20 +177,29 @@ func RangesOverlap(a, b *semver.Constraints) bool {
 }
 
 // ExpandTerraformTildeArrow scans for "~>" => ">=X.Y.Z,<X+1.0.0"
-func ExpandTerraformTildeArrow(input string) string {
-	out := input
-	for {
-		idx := strings.Index(out, "~>")
-		if idx == -1 {
-			break
-		}
-		rest := out[idx+2:]
-		token, remainder := readToken(rest)
-		rangePart := buildRangeFromTildePart(strings.TrimSpace(token))
-		before := out[:idx]
-		out = before + rangePart + remainder
+func ExpandTerraformTildeArrow(version string) string {
+	if version == "" {
+		return version
 	}
-	return out
+
+	// If it's not a tilde arrow version, return as is
+	if !strings.Contains(version, "~>") {
+		return version
+	}
+
+	var result []string
+	for _, part := range strings.Split(version, "||") {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, "~>") {
+			part = strings.TrimPrefix(part, "~>")
+			part = strings.TrimSpace(part)
+			result = append(result, buildRangeFromTildePart(part))
+		} else {
+			result = append(result, part)
+		}
+	}
+
+	return strings.Join(result, " || ")
 }
 
 func readToken(s string) (token, remainder string) {
@@ -183,27 +221,28 @@ func readToken(s string) (token, remainder string) {
 	return s[:min], s[min:]
 }
 
-func buildRangeFromTildePart(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
+func buildRangeFromTildePart(version string) string {
+	version = strings.TrimSpace(version)
+	if version == "" {
 		return "~>MISSING"
 	}
-	parts := strings.Split(raw, ".")
-	switch len(parts) {
-	case 1:
-		major := atoi(parts[0])
-		return fmt.Sprintf(">=%d.0.0, <%d.0.0", major, major+1)
-	case 2:
-		major := atoi(parts[0])
-		return fmt.Sprintf(">=%d.%s.0, <%d.0.0", major, parts[1], major+1)
-	case 3:
-		major := atoi(parts[0])
-		minor := parts[1]
-		patch := parts[2]
-		return fmt.Sprintf(">=%d.%s.%s, <%d.0.0", major, minor, patch, major+1)
-	default:
+
+	parts := strings.Split(version, ".")
+	if len(parts) > 3 {
 		return "~>INVALID"
 	}
+
+	// Parse the version
+	ver, err := semver.NewVersion(version)
+	if err != nil {
+		return ">=0.0.0, <1.0.0"
+	}
+
+	// Calculate the next major version
+	nextMajor := ver.Major() + 1
+
+	// Return the range without spaces after operators
+	return fmt.Sprintf(">=%d.%d.%d, <%d.0.0", ver.Major(), ver.Minor(), ver.Patch(), nextMajor)
 }
 
 func atoi(s string) int {
@@ -237,10 +276,8 @@ func ConvertToExactVersion(version string) (string, error) {
 func ConvertToRangeVersion(version string) (string, error) {
 	// If it's already a range, return as is
 	if _, err := semver.NewConstraint(version); err == nil && strings.Contains(version, ">") {
-		// Ensure consistent spacing
-		version = strings.ReplaceAll(version, ",", ", ")
-		version = strings.ReplaceAll(version, "  ", " ")
-		return version, nil
+		// Normalize the version string
+		return normalizeVersionString(version), nil
 	}
 
 	// Parse as exact version
@@ -250,7 +287,7 @@ func ConvertToRangeVersion(version string) (string, error) {
 	}
 
 	// Convert to range >=current,<next-major with consistent spacing
-	return fmt.Sprintf(">=%s, <%d.0.0", v.String(), v.Major()+1), nil
+	return normalizeVersionString(fmt.Sprintf(">=%s,<%d.0.0", v.String(), v.Major()+1)), nil
 }
 
 func ApplyDynamicStrategy(targetVersion, existingVersion string) (string, error) {
@@ -259,45 +296,54 @@ func ApplyDynamicStrategy(targetVersion, existingVersion string) (string, error)
 		return targetVersion, nil
 	}
 
+	// Expand tilde arrow notation first
+	expandedTarget := ExpandTerraformTildeArrow(targetVersion)
+	expandedExisting := ExpandTerraformTildeArrow(existingVersion)
+
 	// Parse target version/range
-	targetIsVer, targetVer, _, err := ParseVersionOrRange(targetVersion)
+	targetIsVer, targetVer, targetRange, err := ParseVersionOrRange(expandedTarget)
 	if err != nil {
 		return "", fmt.Errorf("invalid target version: %w", err)
 	}
 
 	// Parse existing version/range
-	existingIsVer, _, existingRange, err := ParseVersionOrRange(existingVersion)
+	existingIsVer, existingVer, existingRange, err := ParseVersionOrRange(expandedExisting)
 	if err != nil {
 		// If existing version is invalid, use target as is
 		return targetVersion, nil
 	}
 
-	// If existing is a range
-	if !existingIsVer && existingRange != nil {
-		if targetIsVer {
-			// If target is exact version, check if it fits in existing range
-			if existingRange.Check(targetVer) {
-				// Keep existing range if target version fits
-				return existingVersion, nil
-			}
-			// Create new range based on target version's major
-			nextMajor := targetVer.Major() + 1
-			return fmt.Sprintf(">= %d, < %d", targetVer.Major(), nextMajor), nil
-		}
-		// If target is also a range, use target range
-		return targetVersion, nil
+	// If existing is a range and target is an exact version outside the range,
+	// convert target to a range with the same format
+	if !existingIsVer && existingRange != nil && targetIsVer && !existingRange.Check(targetVer) {
+		nextMajor := targetVer.Major() + 1
+		expandedTarget = fmt.Sprintf(">=%d, <%d", targetVer.Major(), nextMajor)
+		targetIsVer = false
+		targetRange, _ = semver.NewConstraint(expandedTarget)
 	}
 
-	// If existing is exact, keep using exact versions
-	if existingIsVer {
-		if targetIsVer {
-			// Both are exact, use target
-			return targetVersion, nil
-		}
-		// Target is range but we want exact, convert it
-		return ConvertToExactVersion(targetVersion)
-	}
+	// Use DecideVersionOrRange to handle all cases consistently
+	result := DecideVersionOrRange(
+		existingIsVer, existingVer, existingRange, expandedExisting,
+		targetIsVer, targetVer, targetRange, expandedTarget,
+	)
 
-	// Fallback to target as is
-	return targetVersion, nil
+	// Normalize the result
+	return normalizeVersionString(result), nil
+}
+
+// normalizeVersionString ensures consistent formatting of version strings
+func normalizeVersionString(version string) string {
+	// Remove all spaces first
+	version = strings.ReplaceAll(version, " ", "")
+
+	// Add spaces after operators and commas
+	version = strings.ReplaceAll(version, ">=", ">= ")
+	version = strings.ReplaceAll(version, "<", "< ")
+	version = strings.ReplaceAll(version, ",", ", ")
+
+	// Remove any trailing spaces
+	version = strings.TrimSpace(version)
+
+	return version
 }

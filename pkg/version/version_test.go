@@ -116,6 +116,11 @@ func TestDecideVersionOrRange(t *testing.T) {
 		{"protect: single vs range backward", "2.0.0", ">=1.0.0,<1.5.0", "2.0.0"},
 		{"protect: range vs single backward", ">=2.0.0,<3.0.0", "1.5.0", ">=2.0.0,<3.0.0"},
 		{"protect: range vs range backward", ">=2.0.0,<3.0.0", ">=1.0.0,<2.0.0", ">=2.0.0,<3.0.0"},
+
+		// Dynamic strategy tests
+		{"dynamic: backward protection - range with higher minimum", ">= 3.2.2, < 4", "3.2.1", ">= 3.2.2, < 4"},
+		{"dynamic: backward protection - range with higher minimum (complex)", ">= 3.2.0, < 4.0.0", "3.0.0", ">= 3.2.0, < 4.0.0"},
+		{"dynamic: backward protection - range with same minimum", ">= 3.2.0, < 4.0.0", "3.2.0", ">= 3.2.0, < 4.0.0"},
 	}
 
 	for _, tc := range tests {
@@ -227,8 +232,8 @@ func TestVersionStrategies(t *testing.T) {
 			name:            "dynamic: existing range -> keep range (target within)",
 			strategy:        StrategyDynamic,
 			targetVersion:   "2.0.0",
-			existingVersion: ">=1.0.0, <3.0.0",
-			want:            ">=1.0.0, <3.0.0",
+			existingVersion: ">= 1.0.0, < 3.0.0",
+			want:            ">= 1.0.0, < 3.0.0",
 		},
 		{
 			name:            "dynamic: existing range -> new range (target outside)",
@@ -243,6 +248,133 @@ func TestVersionStrategies(t *testing.T) {
 			targetVersion:   "2.0.0",
 			existingVersion: "",
 			want:            "2.0.0",
+		},
+		{
+			name:            "dynamic: backward protection - range with higher minimum",
+			strategy:        StrategyDynamic,
+			targetVersion:   "3.2.1",
+			existingVersion: ">= 3.2.2, < 4",
+			want:            ">= 3.2.2, < 4",
+		},
+		{
+			name:            "dynamic: backward protection - exact to lower range",
+			strategy:        StrategyDynamic,
+			targetVersion:   ">= 2.0.0, < 3.0.0",
+			existingVersion: "3.1.0",
+			want:            "3.1.0",
+		},
+		{
+			name:            "dynamic: backward protection - range with patch version",
+			strategy:        StrategyDynamic,
+			targetVersion:   "3.2.0",
+			existingVersion: ">= 3.2.5, < 4.0.0",
+			want:            ">= 3.2.5, < 4.0.0",
+		},
+		{
+			name:            "dynamic: backward protection - complex range to simpler range",
+			strategy:        StrategyDynamic,
+			targetVersion:   ">= 3, < 4",
+			existingVersion: ">= 3.2.5, < 3.3.0",
+			want:            ">= 3.2.5, < 3.3.0",
+		},
+		{
+			name:            "dynamic: backward protection - tilde arrow to range",
+			strategy:        StrategyDynamic,
+			targetVersion:   ">= 2.0.0, < 3.0.0",
+			existingVersion: "~> 3.2",
+			want:            ">= 3.2.0, < 4.0.0",
+		},
+		{
+			name:            "dynamic: backward protection - range with spaces",
+			strategy:        StrategyDynamic,
+			targetVersion:   "3.0.0",
+			existingVersion: ">= 3.2.0,< 4.0.0",  // no space after comma
+			want:            ">= 3.2.0, < 4.0.0", // normalized with space
+		},
+		{
+			name:            "dynamic: backward protection - range with pre-release",
+			strategy:        StrategyDynamic,
+			targetVersion:   "3.0.0",
+			existingVersion: ">= 3.2.0-beta.1, < 4.0.0",
+			want:            ">= 3.2.0-beta.1, < 4.0.0",
+		},
+		{
+			name:            "dynamic: exact version to higher exact",
+			strategy:        StrategyDynamic,
+			targetVersion:   "3.5.0",
+			existingVersion: "3.2.1",
+			want:            "3.5.0",
+		},
+		{
+			name:            "dynamic: range to higher exact within range",
+			strategy:        StrategyDynamic,
+			targetVersion:   "3.2.5",
+			existingVersion: ">= 3.2.0, < 4.0.0",
+			want:            ">= 3.2.0, < 4.0.0",
+		},
+		{
+			name:            "dynamic: range to exact outside range",
+			strategy:        StrategyDynamic,
+			targetVersion:   "4.0.0",
+			existingVersion: ">= 3.2.0, < 4.0.0",
+			want:            ">= 4, < 5",
+		},
+		// Additional backward protection test cases
+		{
+			name:            "dynamic: backward protection - overlapping ranges with higher minimum",
+			strategy:        StrategyDynamic,
+			targetVersion:   ">= 3.0.0, < 4.0.0",
+			existingVersion: ">= 3.2.0, < 4.0.0",
+			want:            ">= 3.2.0, < 4.0.0",
+		},
+		{
+			name:            "dynamic: backward protection - non-overlapping ranges",
+			strategy:        StrategyDynamic,
+			targetVersion:   ">= 2.0.0, < 3.0.0",
+			existingVersion: ">= 3.0.0, < 4.0.0",
+			want:            ">= 3.0.0, < 4.0.0",
+		},
+		{
+			name:            "dynamic: backward protection - exact to lower exact",
+			strategy:        StrategyDynamic,
+			targetVersion:   "2.0.0",
+			existingVersion: "3.0.0",
+			want:            "3.0.0",
+		},
+		{
+			name:            "dynamic: backward protection - range to lower range",
+			strategy:        StrategyDynamic,
+			targetVersion:   ">= 2.0.0, < 3.0.0",
+			existingVersion: ">= 3.0.0, < 4.0.0",
+			want:            ">= 3.0.0, < 4.0.0",
+		},
+		{
+			name:            "dynamic: backward protection - complex range with pre-release",
+			strategy:        StrategyDynamic,
+			targetVersion:   ">= 3.0.0, < 4.0.0",
+			existingVersion: ">= 3.2.0-beta.1, < 3.3.0-rc.1",
+			want:            ">= 3.2.0-beta.1, < 3.3.0-rc.1",
+		},
+		{
+			name:            "dynamic: backward protection - tilde arrow with higher version",
+			strategy:        StrategyDynamic,
+			targetVersion:   "~> 3.1",
+			existingVersion: "~> 3.2",
+			want:            ">= 3.2.0, < 4.0.0",
+		},
+		{
+			name:            "dynamic: backward protection - range with higher patch version",
+			strategy:        StrategyDynamic,
+			targetVersion:   ">= 3.2.4, < 4.0.0",
+			existingVersion: ">= 3.2.5, < 4.0.0",
+			want:            ">= 3.2.5, < 4.0.0",
+		},
+		{
+			name:            "dynamic: backward protection - exact to range with higher minimum",
+			strategy:        StrategyDynamic,
+			targetVersion:   "3.1.0",
+			existingVersion: ">= 3.2.0, < 4.0.0",
+			want:            ">= 3.2.0, < 4.0.0",
 		},
 
 		// Exact strategy tests
@@ -274,14 +406,14 @@ func TestVersionStrategies(t *testing.T) {
 			strategy:        StrategyRange,
 			targetVersion:   "2.0.0",
 			existingVersion: "1.0.0",
-			want:            ">=2.0.0, <3.0.0",
+			want:            ">= 2.0.0, < 3.0.0",
 		},
 		{
 			name:            "range: from range",
 			strategy:        StrategyRange,
-			targetVersion:   ">=2.0.0, <3.0.0",
-			existingVersion: ">=1.0.0, <2.0.0",
-			want:            ">=2.0.0, <3.0.0",
+			targetVersion:   ">= 2.0.0, < 3.0.0",
+			existingVersion: ">= 1.0.0, < 2.0.0",
+			want:            ">= 2.0.0, < 3.0.0",
 		},
 		{
 			name:            "range: invalid version",

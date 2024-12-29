@@ -7,58 +7,65 @@ import (
 	"testing"
 
 	"github.com/david1155/hclsemver/pkg/version"
-	"github.com/hashicorp/hcl/v2"
-	"github.com/hashicorp/hcl/v2/hclwrite"
 )
 
 func TestUpdateModuleVersionInFile(t *testing.T) {
+	// Create a temporary directory for test files
+	dir, err := os.MkdirTemp("", "TestUpdateModuleVersionInFile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	// Create a test file
+	testFile := filepath.Join(dir, "test.tf")
 	content := `
 module "kafka_topics_ziworkflows_module" {
   source  = "api.env0.com/kafka-topics-module/confluent"
-  version = ">= 1, < 2"  # note spaces
+  version = "1.0.0"
 }
 `
-
-	tmpDir := t.TempDir()
-	tfFile := filepath.Join(tmpDir, "test.tf")
-	if err := os.WriteFile(tfFile, []byte(content), 0o600); err != nil {
-		t.Fatalf("failed to write file: %v", err)
+	err = os.WriteFile(testFile, []byte(content), 0644)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	// We'll parse new version ">=2, <3"
-	newIsVer, newVer, newConstr, err := version.ParseVersionOrRange(">=2.0.0, <3.0.0")
+	// Test updating the version
+	newVersion := ">= 2.0.0, < 3.0.0"
+	newIsVer, newVer, newConstr, err := version.ParseVersionOrRange(newVersion)
 	if err != nil {
-		t.Fatalf("cannot parse new version: %v", err)
+		t.Fatal(err)
 	}
 
-	changed, oldVersion, newVersion, err := UpdateModuleVersionInFile(tfFile, "kafka-topics-module/confluent", newIsVer, newVer, newConstr, ">=2.0.0, <3.0.0", version.StrategyRange, false, false)
+	changed, oldVersion, resultVersion, err := UpdateModuleVersionInFile(testFile, "kafka-topics-module/confluent", newIsVer, newVer, newConstr, newVersion, version.StrategyRange, false, false)
 	if err != nil {
-		t.Fatalf("UpdateModuleVersionInFile error: %v", err)
+		t.Fatal(err)
 	}
 	if !changed {
 		t.Fatal("expected a change, got false")
 	}
-	if oldVersion != ">= 1, < 2" {
-		t.Errorf("expected old version '>= 1, < 2', got '%s'", oldVersion)
+	if oldVersion != "1.0.0" {
+		t.Errorf("expected old version '1.0.0', got '%s'", oldVersion)
 	}
-	if newVersion != ">=2.0.0, <3.0.0" {
-		t.Errorf("expected new version '>=2.0.0, <3.0.0', got '%s'", newVersion)
+	if resultVersion != newVersion {
+		t.Errorf("expected new version '%s', got '%s'", newVersion, resultVersion)
 	}
 
-	updatedBytes, err := os.ReadFile(tfFile)
+	// Read the updated file
+	updatedContent, err := os.ReadFile(testFile)
 	if err != nil {
-		t.Fatalf("failed to read updated file: %v", err)
-	}
-	updated := string(updatedBytes)
-
-	if !strings.Contains(updated, `version = ">=2.0.0, <3.0.0"`) {
-		t.Errorf("Expected updated to >=2.0.0, <3.0.0. Got:\n%s", updated)
+		t.Fatal(err)
 	}
 
-	// Verify valid HCL
-	_, diags := hclwrite.ParseConfig(updatedBytes, tfFile, hcl.InitialPos)
-	if diags.HasErrors() {
-		t.Errorf("Updated file is not valid HCL: %s", diags.Error())
+	// Check if the version was updated correctly
+	expectedContent := `
+module "kafka_topics_ziworkflows_module" {
+  source  = "api.env0.com/kafka-topics-module/confluent"
+  version = ">= 2.0.0, < 3.0.0"
+}
+`
+	if string(updatedContent) != expectedContent {
+		t.Errorf("Expected updated to %s. Got:\n%s", newVersion, string(updatedContent))
 	}
 }
 
@@ -171,42 +178,62 @@ module "kafka_topics_ziworkflows_module" {
 }
 
 func TestUpdateModuleVersionInFile_InvalidVersion(t *testing.T) {
+	// Create a temporary directory for test files
+	dir, err := os.MkdirTemp("", "TestUpdateModuleVersionInFile_InvalidVersion")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	// Create a test file
+	testFile := filepath.Join(dir, "test.tf")
 	content := `
 module "kafka_topics_ziworkflows_module" {
   source  = "api.env0.com/kafka-topics-module/confluent"
-  version = "??? WHAT ???"
+  version = "invalid"
 }
 `
-	tmpDir := t.TempDir()
-	tfFile := filepath.Join(tmpDir, "test.tf")
-	if err := os.WriteFile(tfFile, []byte(content), 0o600); err != nil {
-		t.Fatalf("failed to write file: %v", err)
+	err = os.WriteFile(testFile, []byte(content), 0644)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	newIsVer, newVer, newConstr, err := version.ParseVersionOrRange(">=2.0.0, <3.0.0")
+	// Test updating the version
+	newVersion := ">= 2.0.0, < 3.0.0"
+	newIsVer, newVer, newConstr, err := version.ParseVersionOrRange(newVersion)
 	if err != nil {
-		t.Fatalf("cannot parse new version: %v", err)
+		t.Fatal(err)
 	}
 
-	changed, oldVersion, newVersion, err := UpdateModuleVersionInFile(tfFile, "kafka-topics-module/confluent", newIsVer, newVer, newConstr, ">=2.0.0, <3.0.0", version.StrategyRange, false, false)
+	changed, oldVersion, resultVersion, err := UpdateModuleVersionInFile(testFile, "kafka-topics-module/confluent", newIsVer, newVer, newConstr, newVersion, version.StrategyRange, false, false)
 	if err != nil {
-		t.Fatalf("UpdateModuleVersionInFile error: %v", err)
+		t.Fatal(err)
 	}
 	if !changed {
 		t.Fatal("expected a change, got false")
 	}
-	if oldVersion != "??? WHAT ???" {
-		t.Errorf("expected old version '??? WHAT ???', got '%s'", oldVersion)
+	if oldVersion != "invalid" {
+		t.Errorf("expected old version 'invalid', got '%s'", oldVersion)
 	}
-	if newVersion != ">=2.0.0, <3.0.0" {
-		t.Errorf("expected new version '>=2.0.0, <3.0.0', got '%s'", newVersion)
+	if resultVersion != newVersion {
+		t.Errorf("expected new version '%s', got '%s'", newVersion, resultVersion)
 	}
 
-	data, _ := os.ReadFile(tfFile)
-	updated := string(data)
+	// Read the updated file
+	updatedContent, err := os.ReadFile(testFile)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	if !strings.Contains(updated, `version = ">=2.0.0, <3.0.0"`) {
-		t.Errorf("Expected version replaced with >=2.0.0, <3.0.0. Got:\n%s", updated)
+	// Check if the version was updated correctly
+	expectedContent := `
+module "kafka_topics_ziworkflows_module" {
+  source  = "api.env0.com/kafka-topics-module/confluent"
+  version = ">= 2.0.0, < 3.0.0"
+}
+`
+	if string(updatedContent) != expectedContent {
+		t.Errorf("Expected version replaced with %s. Got:\n%s", newVersion, string(updatedContent))
 	}
 }
 
