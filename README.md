@@ -21,6 +21,7 @@ Alternatively, you can use the Docker image:
 
 ```bash
 docker pull david1155/hclsemver
+# Mount your current directory to /work (default directory)
 docker run -v $(pwd):/work david1155/hclsemver [flags]
 ```
 

@@ -1,4 +1,0 @@
-modules:
-  - source: "argocd-app-factory-module/kubernetes"
-    versions:
-      dev: "3.1.0"
