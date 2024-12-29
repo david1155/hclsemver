@@ -39,6 +39,7 @@ HCL Version Updater uses a YAML or JSON configuration file to specify module upd
 modules:
   - source: "module-source"    # Module source pattern to match
     strategy: "dynamic"        # Optional: dynamic (default), exact, or range
+    force: false              # Optional: whether to add version if not present (default: false)
     versions:
       dev: "2.0.0"            # Version for development
       stg: "2.0.0"            # Version for staging
@@ -46,6 +47,56 @@ modules:
 ```
 
 Note: While examples use "dev", "stg", and "prd" tiers, you can use any tier names that match your infrastructure organization (e.g., "development", "qa", "staging", "production", "sandbox", etc.).
+
+### Module Configuration Options
+
+- `source`: (Required) The module source pattern to match
+- `strategy`: (Optional) Default strategy for all tiers unless overridden
+- `force`: (Optional) Whether to add version attribute to modules that don't have one (default: false)
+- `versions`: (Required) Map of tier-specific version configurations
+
+The `force` flag can be specified at both the module level and tier level:
+- Module level: Applies to all tiers unless overridden
+- Tier level: Overrides the module-level setting for specific tiers
+- Wildcard tier: Applies to all tiers that don't have a specific setting
+
+When a module is found without a version attribute:
+- If `force: false` (default): A warning is output and the module is skipped
+- If `force: true`: The version attribute is added with the specified version
+
+Example with force flag at different levels:
+```yaml
+modules:
+  - source: "hashicorp/aws/vpc"
+    force: true    # Default for all tiers
+    versions:
+      "*":         # Override for all tiers
+        force: false
+        version: "2.0.0"
+      dev:         # Override for specific tier
+        force: true
+        version: "2.0.0"
+      stg:         # Uses wildcard setting (false)
+        version: "2.0.0"
+      prd:         # Override for specific tier
+        force: false
+        version: "2.0.0"
+
+  - source: "custom/module"
+    force: false   # Default for all tiers
+    versions:
+      dev:
+        force: true    # Override for dev tier
+        version: "1.0.0"
+      stg:
+        version: "1.0.0"   # Uses module default (false)
+```
+
+Force flag precedence (highest to lowest):
+1. Tier-specific force setting (e.g., `dev.force`)
+2. Wildcard force setting (`"*".force`)
+3. Module-level force setting
+4. Global default (`false`)
 
 ## Version Update Strategies
 

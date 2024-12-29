@@ -31,7 +31,7 @@ module "kafka_topics_ziworkflows_module" {
 		t.Fatalf("cannot parse new version: %v", err)
 	}
 
-	changed, oldVersion, newVersion, err := UpdateModuleVersionInFile(tfFile, "kafka-topics-module/confluent", newIsVer, newVer, newConstr, ">=2.0.0, <3.0.0", version.StrategyRange, false)
+	changed, oldVersion, newVersion, err := UpdateModuleVersionInFile(tfFile, "kafka-topics-module/confluent", newIsVer, newVer, newConstr, ">=2.0.0, <3.0.0", version.StrategyRange, false, false)
 	if err != nil {
 		t.Fatalf("UpdateModuleVersionInFile error: %v", err)
 	}
@@ -80,7 +80,7 @@ module "example_module" {
 		t.Fatalf("cannot parse new version: %v", err)
 	}
 
-	changed, oldVersion, newVersion, err := UpdateModuleVersionInFile(tfFile, "kafka-topics-module/confluent", newIsVer, newVer, newConstr, ">=2,<3", version.StrategyDynamic, false)
+	changed, oldVersion, newVersion, err := UpdateModuleVersionInFile(tfFile, "kafka-topics-module/confluent", newIsVer, newVer, newConstr, ">=2,<3", version.StrategyDynamic, false, false)
 	if err != nil {
 		t.Fatalf("UpdateModuleVersionInFile error: %v", err)
 	}
@@ -99,43 +99,74 @@ module "example_module" {
 }
 
 func TestUpdateModuleVersionInFile_NoVersion(t *testing.T) {
-	content := `
+	tests := []struct {
+		name    string
+		force   bool
+		wantMod bool
+	}{
+		{
+			name:    "no force flag",
+			force:   false,
+			wantMod: false,
+		},
+		{
+			name:    "with force flag",
+			force:   true,
+			wantMod: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			content := `
 module "kafka_topics_ziworkflows_module" {
   source = "api.env0.com/kafka-topics-module/confluent"
   # no version attribute
 }
 `
-	tmpDir := t.TempDir()
-	tfFile := filepath.Join(tmpDir, "test.tf")
-	if err := os.WriteFile(tfFile, []byte(content), 0o600); err != nil {
-		t.Fatalf("failed to write file: %v", err)
-	}
+			tmpDir := t.TempDir()
+			tfFile := filepath.Join(tmpDir, "test.tf")
+			if err := os.WriteFile(tfFile, []byte(content), 0o600); err != nil {
+				t.Fatalf("failed to write file: %v", err)
+			}
 
-	// new version => ">=2,<3"
-	newIsVer, newVer, newConstr, err := version.ParseVersionOrRange(">=2,<3")
-	if err != nil {
-		t.Fatalf("cannot parse new version: %v", err)
-	}
+			// new version => ">=2,<3"
+			newIsVer, newVer, newConstr, err := version.ParseVersionOrRange(">=2,<3")
+			if err != nil {
+				t.Fatalf("cannot parse new version: %v", err)
+			}
 
-	changed, oldVersion, newVersion, err := UpdateModuleVersionInFile(tfFile, "kafka-topics-module/confluent", newIsVer, newVer, newConstr, ">=2,<3", version.StrategyDynamic, false)
-	if err != nil {
-		t.Fatalf("UpdateModuleVersionInFile error: %v", err)
-	}
-	if !changed {
-		t.Fatal("expected a change, got false")
-	}
-	if oldVersion != "" {
-		t.Errorf("expected empty old version, got '%s'", oldVersion)
-	}
-	if newVersion != ">=2,<3" {
-		t.Errorf("expected new version '>=2,<3', got '%s'", newVersion)
-	}
+			changed, oldVersion, newVersion, err := UpdateModuleVersionInFile(tfFile, "kafka-topics-module/confluent", newIsVer, newVer, newConstr, ">=2,<3", version.StrategyDynamic, false, tt.force)
+			if err != nil {
+				t.Fatalf("UpdateModuleVersionInFile error: %v", err)
+			}
 
-	data, _ := os.ReadFile(tfFile)
-	updated := string(data)
+			if changed != tt.wantMod {
+				t.Fatalf("expected changed=%v, got %v", tt.wantMod, changed)
+			}
 
-	if !strings.Contains(updated, `version = ">=2,<3"`) {
-		t.Errorf("Expected new version attribute. Got:\n%s", updated)
+			if tt.wantMod {
+				if oldVersion != "" {
+					t.Errorf("expected empty old version, got '%s'", oldVersion)
+				}
+				if newVersion != ">=2,<3" {
+					t.Errorf("expected new version '>=2,<3', got '%s'", newVersion)
+				}
+
+				data, _ := os.ReadFile(tfFile)
+				updated := string(data)
+
+				if !strings.Contains(updated, `version = ">=2,<3"`) {
+					t.Errorf("Expected new version attribute. Got:\n%s", updated)
+				}
+			} else {
+				// Check file wasn't modified
+				data, _ := os.ReadFile(tfFile)
+				if string(data) != content {
+					t.Errorf("Expected file to remain unchanged. Got:\n%s", string(data))
+				}
+			}
+		})
 	}
 }
 
@@ -157,7 +188,7 @@ module "kafka_topics_ziworkflows_module" {
 		t.Fatalf("cannot parse new version: %v", err)
 	}
 
-	changed, oldVersion, newVersion, err := UpdateModuleVersionInFile(tfFile, "kafka-topics-module/confluent", newIsVer, newVer, newConstr, ">=2.0.0, <3.0.0", version.StrategyRange, false)
+	changed, oldVersion, newVersion, err := UpdateModuleVersionInFile(tfFile, "kafka-topics-module/confluent", newIsVer, newVer, newConstr, ">=2.0.0, <3.0.0", version.StrategyRange, false, false)
 	if err != nil {
 		t.Fatalf("UpdateModuleVersionInFile error: %v", err)
 	}
@@ -197,7 +228,7 @@ module "test" {
 		t.Fatalf("Failed to parse version: %v", err)
 	}
 
-	_, _, _, err = UpdateModuleVersionInFile(tfFile, "test-module", newIsVer, newVer, newConstr, "2.0.0", version.StrategyDynamic, false)
+	_, _, _, err = UpdateModuleVersionInFile(tfFile, "test-module", newIsVer, newVer, newConstr, "2.0.0", version.StrategyDynamic, false, false)
 	if err == nil {
 		t.Error("Expected error for invalid HCL, got nil")
 	}
@@ -231,9 +262,58 @@ module "test" {
 		t.Fatalf("Failed to parse version: %v", err)
 	}
 
-	_, _, _, err = UpdateModuleVersionInFile(tfFile, "test-module", newIsVer, newVer, newConstr, "2.0.0", version.StrategyDynamic, false)
+	_, _, _, err = UpdateModuleVersionInFile(tfFile, "test-module", newIsVer, newVer, newConstr, "2.0.0", version.StrategyDynamic, false, false)
 	if err == nil {
 		t.Error("Expected error for write-protected file, got nil")
+	}
+}
+
+func TestUpdateModuleVersionInFile_DryRun(t *testing.T) {
+	content := `
+module "test_module" {
+  source  = "test/test-module"
+  version = "1.0.0"
+}
+`
+	tmpDir := t.TempDir()
+	tfFile := filepath.Join(tmpDir, "test.tf")
+	if err := os.WriteFile(tfFile, []byte(content), 0o600); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+
+	// Save original content for comparison
+	originalContent := content
+
+	newIsVer, newVer, newConstr, err := version.ParseVersionOrRange("2.0.0")
+	if err != nil {
+		t.Fatalf("Failed to parse version: %v", err)
+	}
+
+	changed, oldVersion, newVersion, err := UpdateModuleVersionInFile(tfFile, "test-module", newIsVer, newVer, newConstr, "2.0.0", version.StrategyDynamic, true, false)
+	if err != nil {
+		t.Fatalf("UpdateModuleVersionInFile error: %v", err)
+	}
+
+	// Check that the change was detected
+	if !changed {
+		t.Error("Expected change to be detected in dry-run mode")
+	}
+
+	// Check versions are correct
+	if oldVersion != "1.0.0" {
+		t.Errorf("Expected old version '1.0.0', got '%s'", oldVersion)
+	}
+	if newVersion != "2.0.0" {
+		t.Errorf("Expected new version '2.0.0', got '%s'", newVersion)
+	}
+
+	// Check that file was not modified
+	data, err := os.ReadFile(tfFile)
+	if err != nil {
+		t.Fatalf("Failed to read file: %v", err)
+	}
+	if string(data) != originalContent {
+		t.Error("File was modified in dry-run mode")
 	}
 }
 
@@ -286,55 +366,6 @@ func TestShouldProcessTier(t *testing.T) {
 					tc.path, tc.configTiers, got, tc.want)
 			}
 		})
-	}
-}
-
-func TestUpdateModuleVersionInFile_DryRun(t *testing.T) {
-	content := `
-module "test_module" {
-  source  = "test/test-module"
-  version = "1.0.0"
-}
-`
-	tmpDir := t.TempDir()
-	tfFile := filepath.Join(tmpDir, "test.tf")
-	if err := os.WriteFile(tfFile, []byte(content), 0o600); err != nil {
-		t.Fatalf("failed to write file: %v", err)
-	}
-
-	// Save original content for comparison
-	originalContent := content
-
-	newIsVer, newVer, newConstr, err := version.ParseVersionOrRange("2.0.0")
-	if err != nil {
-		t.Fatalf("Failed to parse version: %v", err)
-	}
-
-	changed, oldVersion, newVersion, err := UpdateModuleVersionInFile(tfFile, "test-module", newIsVer, newVer, newConstr, "2.0.0", version.StrategyDynamic, true)
-	if err != nil {
-		t.Fatalf("UpdateModuleVersionInFile error: %v", err)
-	}
-
-	// Check that the change was detected
-	if !changed {
-		t.Error("Expected change to be detected in dry-run mode")
-	}
-
-	// Check versions are correct
-	if oldVersion != "1.0.0" {
-		t.Errorf("Expected old version '1.0.0', got '%s'", oldVersion)
-	}
-	if newVersion != "2.0.0" {
-		t.Errorf("Expected new version '2.0.0', got '%s'", newVersion)
-	}
-
-	// Check that file was not modified
-	data, err := os.ReadFile(tfFile)
-	if err != nil {
-		t.Fatalf("Failed to read file: %v", err)
-	}
-	if string(data) != originalContent {
-		t.Error("File was modified in dry-run mode")
 	}
 }
 

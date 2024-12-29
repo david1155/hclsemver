@@ -12,6 +12,7 @@ func TestLoadConfig_YAML(t *testing.T) {
 	yamlContent := `
 modules:
   - source: "kafka-topics-module/confluent"
+    force: true
     versions:
       dev:
         strategy: "range"
@@ -23,6 +24,7 @@ modules:
         version: "2.0.0"
   - source: "another-module/example"
     strategy: "exact"
+    force: false
     versions:
       dev: "1.0.0"
       staging: "1.2.0"
@@ -49,6 +51,15 @@ modules:
 	if m1.Source != "kafka-topics-module/confluent" {
 		t.Errorf("expected source 'kafka-topics-module/confluent', got %s", m1.Source)
 	}
+	if !m1.Force {
+		t.Error("expected force to be true for first module")
+	}
+
+	// Check second module
+	m2 := config.Modules[1]
+	if m2.Force {
+		t.Error("expected force to be false for second module")
+	}
 
 	// Check version configs
 	devConfig, err := UnmarshalVersionConfig(m1.Versions["dev"])
@@ -69,6 +80,7 @@ func TestLoadConfig_JSON(t *testing.T) {
 			{
 				"source": "kafka-topics-module/confluent",
 				"strategy": "dynamic",
+				"force": true,
 				"versions": {
 					"dev": {
 						"strategy": "range",
@@ -86,6 +98,7 @@ func TestLoadConfig_JSON(t *testing.T) {
 			{
 				"source": "another-module/example",
 				"strategy": "exact",
+				"force": false,
 				"versions": {
 					"dev": "1.0.0",
 					"staging": "1.2.0",
@@ -111,10 +124,16 @@ func TestLoadConfig_JSON(t *testing.T) {
 		t.Errorf("expected 2 modules, got %d", len(config.Modules))
 	}
 
+	// Check first module
+	m1 := config.Modules[0]
+	if !m1.Force {
+		t.Error("expected force to be true for first module")
+	}
+
 	// Check second module
 	m2 := config.Modules[1]
-	if m2.Source != "another-module/example" {
-		t.Errorf("expected source 'another-module/example', got %s", m2.Source)
+	if m2.Force {
+		t.Error("expected force to be false for second module")
 	}
 
 	// Check version configs
@@ -476,6 +495,110 @@ func TestUnmarshalVersionConfig(t *testing.T) {
 			}
 			if got.Strategy != tc.want.Strategy || got.Version != tc.want.Version {
 				t.Errorf("got %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestGetEffectiveForce(t *testing.T) {
+	tests := []struct {
+		name         string
+		moduleConfig ModuleConfig
+		tier         string
+		want         bool
+	}{
+		{
+			name: "no force specified",
+			moduleConfig: ModuleConfig{
+				Source:   "test-module",
+				Versions: map[string]interface{}{"dev": "1.0.0"},
+			},
+			tier: "dev",
+			want: false,
+		},
+		{
+			name: "only module force",
+			moduleConfig: ModuleConfig{
+				Source:   "test-module",
+				Force:    true,
+				Versions: map[string]interface{}{"dev": "1.0.0"},
+			},
+			tier: "dev",
+			want: true,
+		},
+		{
+			name: "tier-specific force",
+			moduleConfig: ModuleConfig{
+				Source: "test-module",
+				Force:  false,
+				Versions: map[string]interface{}{
+					"dev": map[string]interface{}{
+						"force":   true,
+						"version": "1.0.0",
+					},
+				},
+			},
+			tier: "dev",
+			want: true,
+		},
+		{
+			name: "wildcard force",
+			moduleConfig: ModuleConfig{
+				Source: "test-module",
+				Force:  false,
+				Versions: map[string]interface{}{
+					"*": map[string]interface{}{
+						"force":   true,
+						"version": "1.0.0",
+					},
+					"dev": "1.0.0",
+				},
+			},
+			tier: "dev",
+			want: true,
+		},
+		{
+			name: "tier force overrides wildcard",
+			moduleConfig: ModuleConfig{
+				Source: "test-module",
+				Force:  true,
+				Versions: map[string]interface{}{
+					"*": map[string]interface{}{
+						"force":   true,
+						"version": "1.0.0",
+					},
+					"dev": map[string]interface{}{
+						"force":   false,
+						"version": "1.0.0",
+					},
+				},
+			},
+			tier: "dev",
+			want: false,
+		},
+		{
+			name: "wildcard overrides module force",
+			moduleConfig: ModuleConfig{
+				Source: "test-module",
+				Force:  false,
+				Versions: map[string]interface{}{
+					"*": map[string]interface{}{
+						"force":   true,
+						"version": "1.0.0",
+					},
+					"dev": "1.0.0",
+				},
+			},
+			tier: "dev",
+			want: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := GetEffectiveForce(tc.moduleConfig, tc.tier)
+			if got != tc.want {
+				t.Errorf("got %v, want %v", got, tc.want)
 			}
 		})
 	}
