@@ -98,36 +98,41 @@ func TestDecideVersionOrRange(t *testing.T) {
 		{"single vs single: equal => keep old", "3.0.0", "3.0.0", "3.0.0"},
 
 		// old single, new range
-		{"old single fits new => keep old", "1.2.3", ">=1.0.0,<2.0.0", "1.2.3"},
-		{"old single doesn't fit => new range", "1.2.3", ">=2.0.0,<3.0.0", ">=2.0.0,<3.0.0"},
+		{"single vs range: fits", "1.5.0", ">=1.0.0,<2.0.0", "1.5.0"},
+		{"single vs range: old higher than range max", "2.5.0", ">=1.0.0,<2.0.0", "2.5.0"},
+		{"single vs range: doesn't fit", "2.5.0", ">=3.0.0,<4.0.0", ">=3.0.0,<4.0.0"},
 
 		// old range, new single
-		{"new single fits old => keep old", ">=1.0.0,<2.0.0", "1.2.3", ">=1.0.0,<2.0.0"},
-		{"new single doesn't fit => new single", ">=2.0.0,<3.0.0", "3.5.0", "3.5.0"},
+		{"range vs single: fits", ">=1.0.0,<2.0.0", "1.5.0", ">=1.0.0,<2.0.0"},
+		{"range vs single: range max higher than new", ">=2.0.0,<3.0.0", "1.5.0", ">=2.0.0,<3.0.0"},
+		{"range vs single: doesn't fit", ">=1.0.0,<2.0.0", "2.5.0", "2.5.0"},
 
-		// both ranges
-		{"both overlap => keep old", ">=1.0.0,<2.0.0", ">=1.5.0,<1.8.0", ">=1.0.0,<2.0.0"},
-		{"both no overlap => pick new", ">=2.0.0,<3.0.0", ">=3.0.0,<4.0.0", ">=3.0.0,<4.0.0"},
-		{"both partial overlap => keep old", "~>1.2.0", "^1.5.0", "~>1.2.0"},
+		// both range
+		{"range vs range: overlap", ">=1.0.0,<2.0.0", ">=1.5.0,<2.5.0", ">=1.0.0,<2.0.0"},
+		{"range vs range: no overlap", ">=1.0.0,<2.0.0", ">=3.0.0,<4.0.0", ">=3.0.0,<4.0.0"},
+
+		// Backward version protection tests
+		{"protect: single vs single backward", "2.0.0", "1.0.0", "2.0.0"},
+		{"protect: single vs range backward", "2.0.0", ">=1.0.0,<1.5.0", "2.0.0"},
+		{"protect: range vs single backward", ">=2.0.0,<3.0.0", "1.5.0", ">=2.0.0,<3.0.0"},
+		{"protect: range vs range backward", ">=2.0.0,<3.0.0", ">=1.0.0,<2.0.0", ">=2.0.0,<3.0.0"},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			oldIsVer, oldVer, oldRng, errOld := ParseVersionOrRange(tc.oldInput)
-			if errOld != nil {
-				t.Fatalf("old parse error: %v", errOld)
+			oldIsVer, oldVer, oldRange, err := ParseVersionOrRange(tc.oldInput)
+			if err != nil {
+				t.Fatalf("parse old=%q error: %v", tc.oldInput, err)
 			}
-			newIsVer, newVer, newRng, errNew := ParseVersionOrRange(tc.newInput)
-			if errNew != nil {
-				t.Fatalf("new parse error: %v", errNew)
+			newIsVer, newVer, newRange, err := ParseVersionOrRange(tc.newInput)
+			if err != nil {
+				t.Fatalf("parse new=%q error: %v", tc.newInput, err)
 			}
-			got := DecideVersionOrRange(
-				oldIsVer, oldVer, oldRng, tc.oldInput,
-				newIsVer, newVer, newRng, tc.newInput,
-			)
+
+			got := DecideVersionOrRange(oldIsVer, oldVer, oldRange, tc.oldInput,
+				newIsVer, newVer, newRange, tc.newInput)
 			if got != tc.want {
-				t.Errorf("DecideVersionOrRange(%q, %q) = %q, want %q",
-					tc.oldInput, tc.newInput, got, tc.want)
+				t.Errorf("got %q, want %q", got, tc.want)
 			}
 		})
 	}
