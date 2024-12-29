@@ -91,6 +91,17 @@ func ScanAndUpdateModules(
 	return err
 }
 
+// extractModuleName extracts the module name from a source path
+func extractModuleName(source string) string {
+	parts := strings.Split(source, "/")
+	for _, part := range parts {
+		if strings.HasSuffix(part, "-module") {
+			return part
+		}
+	}
+	return source
+}
+
 // UpdateModuleVersionInFile reads a single .tf file, finds any module blocks
 // whose "source" matches oldSourceSubstr, then updates "version" attribute using
 // "keep old if it fits new, else new" logic. We pass newInput to decideVersionOrRange.
@@ -135,7 +146,11 @@ func UpdateModuleVersionInFile(
 		sourceTokens := sourceAttr.Expr().BuildTokens(nil)
 		sourceValue := strings.Trim(string(sourceTokens.Bytes()), `"`)
 
-		if !strings.Contains(sourceValue, oldSourceSubstr) {
+		// Extract module names and compare
+		sourceModuleName := extractModuleName(sourceValue)
+		targetModuleName := extractModuleName(oldSourceSubstr)
+
+		if sourceModuleName != targetModuleName {
 			continue
 		}
 

@@ -266,11 +266,11 @@ modules:
 
 ## Directory Structure Support
 
-HCL Version Updater works with various directory organizations. By default, it looks in the `work` directory, but you can override this with the `-dir` flag.
+HCL Version Updater works with various directory organizations. By default, it looks in the `/work` directory, but you can override this with the `-dir` flag.
 
-### 1. Default Structure (work directory)
+### 1. Default Structure (/work directory)
 ```
-work/
+/work/
 ├── dev/
 │   └── main.tf
 ├── stg/
@@ -292,7 +292,7 @@ infrastructure/  # Specified with -dir flag
 
 ### 3. Tier-Based Files
 ```
-work/  # or custom directory
+/work/  # or custom directory
 ├── dev.tf
 ├── stg.tf
 └── prd.tf
@@ -300,7 +300,7 @@ work/  # or custom directory
 
 ### 4. Mixed Structure
 ```
-work/  # or custom directory
+/work/  # or custom directory
 ├── shared/
 │   ├── dev.tf
 │   ├── stg.tf
@@ -317,13 +317,13 @@ work/  # or custom directory
 ## Usage Examples
 
 ### 1. Basic Update
-By default, the tool scans the `work` directory in your current path:
+By default, the tool scans the `/work` directory in your current path:
 ```bash
 hclsemver -config versions.yaml
 ```
 
 ### 2. Custom Directory
-You can specify a different directory to scan:
+You can specify a different directory to scan:config 
 ```bash
 hclsemver -config versions.yaml -dir infrastructure
 ```
