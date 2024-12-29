@@ -181,9 +181,12 @@ func UpdateModuleVersionInFile(
 		}
 		newVersion = finalVersion
 
-		// Update the version attribute
-		block.Body().SetAttributeValue("version", cty.StringVal(finalVersion))
-		changed = true
+		// Only update if the version has actually changed
+		if oldVersion != finalVersion {
+			// Update the version attribute
+			block.Body().SetAttributeValue("version", cty.StringVal(finalVersion))
+			changed = true
+		}
 	}
 
 	if !changed {
