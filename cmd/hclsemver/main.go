@@ -12,7 +12,7 @@ import (
 	"github.com/david1155/hclsemver/pkg/version"
 )
 
-func processConfig(configFile string, workDir string) error {
+func processConfig(configFile string, workDir string, dryRun bool) error {
 	// Read and parse config
 	cfg, err := config.LoadConfig(configFile)
 	if err != nil {
@@ -48,7 +48,7 @@ func processConfig(configFile string, workDir string) error {
 			}
 
 			rootDir := filepath.Join(workDir, tier)
-			if err := terraform.ScanAndUpdateModules(rootDir, module.Source, newIsVer, newVer, newConstr, versionConfig.Version, configTiers, strategy); err != nil {
+			if err := terraform.ScanAndUpdateModules(rootDir, module.Source, newIsVer, newVer, newConstr, versionConfig.Version, configTiers, strategy, dryRun); err != nil {
 				log.Printf("Error processing module '%s' in tier '%s': %v", module.Source, tier, err)
 				continue
 			}
@@ -74,6 +74,7 @@ func mainWithFlags(args []string, workDir string) error {
 	// Define flags
 	configFile := flags.String("config", "", "Path to config file (JSON or YAML)")
 	dir := flags.String("dir", "work", "Directory to scan for Terraform files")
+	dryRun := flags.Bool("dry-run", false, "Preview changes without modifying files")
 	help := flags.Bool("help", false, "Display help information")
 
 	// Parse flags
@@ -95,7 +96,7 @@ func mainWithFlags(args []string, workDir string) error {
 		return fmt.Errorf("config file is required: -config path/to/config.yaml")
 	}
 
-	return processConfig(*configFile, *dir)
+	return processConfig(*configFile, *dir, *dryRun)
 }
 
 func main() {

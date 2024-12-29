@@ -48,6 +48,7 @@ func ScanAndUpdateModules(
 	newInput string,
 	configTiers map[string]bool,
 	strategy version.Strategy,
+	dryRun bool,
 ) error {
 	err := filepath.WalkDir(workDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -67,15 +68,21 @@ func ScanAndUpdateModules(
 			return nil
 		}
 
-		changed, oldVersion, newVersion, err := UpdateModuleVersionInFile(path, oldSourceSubstr, newIsVer, newVer, newConstr, newInput, strategy)
+		changed, oldVersion, newVersion, err := UpdateModuleVersionInFile(path, oldSourceSubstr, newIsVer, newVer, newConstr, newInput, strategy, dryRun)
 		if err != nil {
 			return fmt.Errorf("error updating file %s: %w", path, err)
 		}
 
 		if changed {
-			fmt.Printf("Updated file %s:\n", path)
-			fmt.Printf("  - Version changed from '%s' to '%s'\n", oldVersion, newVersion)
-			fmt.Printf("  - Strategy used: %s\n", strategy)
+			if dryRun {
+				fmt.Printf("[DRY RUN] Would update file %s:\n", path)
+				fmt.Printf("  - Would change version from '%s' to '%s'\n", oldVersion, newVersion)
+				fmt.Printf("  - Strategy that would be used: %s\n", strategy)
+			} else {
+				fmt.Printf("Updated file %s:\n", path)
+				fmt.Printf("  - Version changed from '%s' to '%s'\n", oldVersion, newVersion)
+				fmt.Printf("  - Strategy used: %s\n", strategy)
+			}
 		}
 
 		return nil
@@ -95,6 +102,7 @@ func UpdateModuleVersionInFile(
 	newConstr *semver.Constraints,
 	newInput string,
 	strategy version.Strategy,
+	dryRun bool,
 ) (bool, string, string, error) {
 	// 1) Read file
 	src, err := os.ReadFile(filename)
@@ -153,9 +161,11 @@ func UpdateModuleVersionInFile(
 		return false, "", "", nil
 	}
 
-	// Write the file back
-	if err := os.WriteFile(filename, file.Bytes(), 0o644); err != nil {
-		return false, "", "", fmt.Errorf("failed to write file %s: %w", filename, err)
+	if !dryRun {
+		// Write the file back
+		if err := os.WriteFile(filename, file.Bytes(), 0o644); err != nil {
+			return false, "", "", fmt.Errorf("failed to write file %s: %w", filename, err)
+		}
 	}
 
 	return true, oldVersion, newVersion, nil
