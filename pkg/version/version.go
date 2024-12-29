@@ -55,13 +55,20 @@ func DecideVersionOrRange(
 ) string {
 	switch {
 	case oldIsVer && newIsVer:
-		if oldVer.GreaterThan(newVer) || oldVer.Equal(newVer) {
+		// If old version is greater than new version, keep old version
+		if oldVer.GreaterThan(newVer) {
 			return oldVer.Original()
 		}
 		return newVer.Original()
 
 	case oldIsVer && !newIsVer:
+		// If old version is exact and new is a range, check if old version is greater than any version in the range
 		if newRange.Check(oldVer) {
+			return oldVer.Original()
+		}
+		// Try to find the highest version in the new range
+		maxVer := findHighestVersionInRange(newRange)
+		if maxVer != nil && oldVer.GreaterThan(maxVer) {
 			return oldVer.Original()
 		}
 		return newInput
@@ -70,14 +77,59 @@ func DecideVersionOrRange(
 		if oldRange != nil && oldRange.Check(newVer) {
 			return oldInput
 		}
+		// Try to find the highest version in the old range
+		maxVer := findHighestVersionInRange(oldRange)
+		if maxVer != nil && maxVer.GreaterThan(newVer) {
+			return oldInput
+		}
 		return newVer.Original()
 
 	default:
-		if oldRange != nil && newRange != nil && RangesOverlap(oldRange, newRange) {
+		// Both are ranges
+		if oldRange == nil || newRange == nil {
+			return newInput
+		}
+
+		// Find highest versions in both ranges
+		oldMaxVer := findHighestVersionInRange(oldRange)
+		newMaxVer := findHighestVersionInRange(newRange)
+
+		// If old range has higher version than new range, keep old range
+		if oldMaxVer != nil && newMaxVer != nil && oldMaxVer.GreaterThan(newMaxVer) {
 			return oldInput
 		}
+
+		// If ranges overlap, keep old range for consistency
+		if RangesOverlap(oldRange, newRange) {
+			return oldInput
+		}
+
 		return newInput
 	}
+}
+
+// findHighestVersionInRange tries to find the highest version that satisfies the constraints
+// by checking common version patterns
+func findHighestVersionInRange(c *semver.Constraints) *semver.Version {
+	if c == nil {
+		return nil
+	}
+
+	// Try to find the highest version that satisfies the constraints
+	var highestVer *semver.Version
+	for major := 0; major <= MAX_MAJOR; major++ {
+		for minor := 0; minor <= MAX_MINOR; minor++ {
+			for patch := 0; patch <= MAX_PATCH; patch++ {
+				testVer, _ := semver.NewVersion(fmt.Sprintf("%d.%d.%d", major, minor, patch))
+				if c.Check(testVer) {
+					if highestVer == nil || testVer.GreaterThan(highestVer) {
+						highestVer = testVer
+					}
+				}
+			}
+		}
+	}
+	return highestVer
 }
 
 // RangesOverlap tries some sample versions from 0.0.0..(MAX_MAJOR,MAX_MINOR,MAX_PATCH).

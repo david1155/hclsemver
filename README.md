@@ -100,16 +100,35 @@ Force flag precedence (highest to lowest):
 
 ## Version Update Strategies
 
-There are three strategies available for version management:
-- `dynamic` (default): Preserves existing version style
-- `exact`: Requires exact version specification
-- `range`: Forces version ranges
+The tool supports three version update strategies:
 
-Strategies can be specified:
-1. At the module level (applies to all tiers unless overridden)
-2. For all tiers using "*"
-3. Per specific tier
-4. A combination of the above, where more specific settings override general ones
+1. `dynamic` (default): Intelligently decides between exact versions and ranges
+   - Preserves existing version style (exact or range) when possible
+   - Prevents backward version changes (keeps higher version if target is lower)
+   - Converts between styles only when necessary
+
+2. `exact`: Always uses exact versions (e.g., "1.2.3")
+   - Converts any range to an exact version
+   - Prevents backward version changes
+   - Useful when precise version control is needed
+
+3. `range`: Always uses version ranges (e.g., ">=1.2.3,<2.0.0")
+   - Converts any exact version to a range
+   - Prevents backward version changes
+   - Useful for more flexible version management
+
+### Backward Version Protection
+
+The tool includes built-in protection against backward version changes:
+
+- When updating from a higher version to a lower version, the higher version is preserved
+- This applies to both exact versions and version ranges
+- Examples:
+  - Exact versions: If current version is 2.0.0 and target is 1.0.0, keeps 2.0.0
+  - Ranges: If current range is ">=2.0.0,<3.0.0" and target is ">=1.0.0,<2.0.0", keeps current range
+  - Mixed: If current version is 2.0.0 and target range is ">=1.0.0,<1.5.0", keeps 2.0.0
+
+This protection ensures that modules don't accidentally downgrade to older versions during updates.
 
 ### Strategy Configuration Examples
 
