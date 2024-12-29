@@ -73,7 +73,7 @@ func mainWithFlags(args []string, workDir string) error {
 
 	// Define flags
 	configFile := flags.String("config", "", "Path to config file (JSON or YAML)")
-	dir := flags.String("dir", "work", "Directory to scan for Terraform files")
+	dir := flags.String("dir", "/work", "Directory to scan for Terraform files")
 	dryRun := flags.Bool("dry-run", false, "Preview changes without modifying files")
 	help := flags.Bool("help", false, "Display help information")
 
@@ -100,7 +100,7 @@ func mainWithFlags(args []string, workDir string) error {
 }
 
 func main() {
-	if err := mainWithFlags(os.Args[1:], "work"); err != nil {
+	if err := mainWithFlags(os.Args[1:], "/work"); err != nil {
 		log.Fatal(err)
 	}
 }
