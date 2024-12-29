@@ -210,7 +210,7 @@ func TestUpdateModuleVersionInFile_WriteError(t *testing.T) {
 
 	content := `
 module "test" {
-  source = "test-module"
+  source = "test/test-module"
   version = "1.0.0"
 }
 `
@@ -292,7 +292,7 @@ func TestShouldProcessTier(t *testing.T) {
 func TestUpdateModuleVersionInFile_DryRun(t *testing.T) {
 	content := `
 module "test_module" {
-  source  = "test-module"
+  source  = "test/test-module"
   version = "1.0.0"
 }
 `
@@ -329,11 +329,73 @@ module "test_module" {
 	}
 
 	// Check that file was not modified
-	currentContent, err := os.ReadFile(tfFile)
+	data, err := os.ReadFile(tfFile)
 	if err != nil {
 		t.Fatalf("Failed to read file: %v", err)
 	}
-	if string(currentContent) != originalContent {
+	if string(data) != originalContent {
 		t.Error("File was modified in dry-run mode")
+	}
+}
+
+func TestMatchModuleSource(t *testing.T) {
+	tests := []struct {
+		name    string
+		source  string
+		pattern string
+		want    bool
+	}{
+		{
+			name:    "exact match",
+			source:  "hashicorp/aws/vpc",
+			pattern: "aws/vpc",
+			want:    true,
+		},
+		{
+			name:    "match at start",
+			source:  "aws/vpc/module",
+			pattern: "aws/vpc",
+			want:    true,
+		},
+		{
+			name:    "match in middle",
+			source:  "registry.terraform.io/aws/vpc/latest",
+			pattern: "aws/vpc",
+			want:    true,
+		},
+		{
+			name:    "no match - different segments",
+			source:  "api.env0.com/test/foundations-service-account-module/google",
+			pattern: "service-account-module",
+			want:    false,
+		},
+		{
+			name:    "no match - partial segment",
+			source:  "hashicorp/aws-vpc/module",
+			pattern: "aws",
+			want:    false,
+		},
+		{
+			name:    "single segment match",
+			source:  "hashicorp/aws/vpc",
+			pattern: "aws",
+			want:    true,
+		},
+		{
+			name:    "case sensitive",
+			source:  "hashicorp/AWS/vpc",
+			pattern: "aws",
+			want:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := matchModuleSource(tt.source, tt.pattern)
+			if got != tt.want {
+				t.Errorf("matchModuleSource(%q, %q) = %v, want %v",
+					tt.source, tt.pattern, got, tt.want)
+			}
+		})
 	}
 }
