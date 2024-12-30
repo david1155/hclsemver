@@ -17,6 +17,122 @@ func TestUpdateModuleVersionInFile(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
+	// Test cases
+	tests := []struct {
+		name        string
+		content     string
+		newVersion  string
+		wantChanged bool
+		wantOld     string
+		wantNew     string
+	}{
+		{
+			name: "no space after comma in range",
+			content: `
+module "test_module" {
+  source  = "api.env0.com/test-module/test"
+  version = ">=1.0.0,<2.0.0"
+}`,
+			newVersion:  ">= 1.0.0, < 2.0.0",
+			wantChanged: false,
+			wantOld:     ">=1.0.0,<2.0.0",
+			wantNew:     "",
+		},
+		{
+			name: "inconsistent spaces in range",
+			content: `
+module "test_module" {
+  source  = "api.env0.com/test-module/test"
+  version = ">=1.0.0, <2.0.0"
+}`,
+			newVersion:  ">= 1.0.0, < 2.0.0",
+			wantChanged: false,
+			wantOld:     ">=1.0.0, <2.0.0",
+			wantNew:     "",
+		},
+		{
+			name: "extra spaces in range",
+			content: `
+module "test_module" {
+  source  = "api.env0.com/test-module/test"
+  version = ">=  1.0.0,  <  2.0.0"
+}`,
+			newVersion:  ">= 1.0.0, < 2.0.0",
+			wantChanged: false,
+			wantOld:     ">=  1.0.0,  <  2.0.0",
+			wantNew:     "",
+		},
+		{
+			name: "no spaces at all in range",
+			content: `
+module "test_module" {
+  source  = "api.env0.com/test-module/test"
+  version = ">=1.0.0<2.0.0"
+}`,
+			newVersion:  ">= 1.0.0, < 2.0.0",
+			wantChanged: false,
+			wantOld:     ">=1.0.0<2.0.0",
+			wantNew:     "",
+		},
+		{
+			name: "spaces in version numbers",
+			content: `
+module "test_module" {
+  source  = "api.env0.com/test-module/test"
+  version = ">= 1.0.0 , < 2.0.0 "
+}`,
+			newVersion:  ">= 1.0.0, < 2.0.0",
+			wantChanged: false,
+			wantOld:     ">= 1.0.0 , < 2.0.0 ",
+			wantNew:     "",
+		},
+		{
+			name: "mixed spaces in operators",
+			content: `
+module "test_module" {
+  source  = "api.env0.com/test-module/test"
+  version = ">=1.0.0, <2.0.0"
+}`,
+			newVersion:  ">= 1.0.0, < 2.0.0",
+			wantChanged: false,
+			wantOld:     ">=1.0.0, <2.0.0",
+			wantNew:     "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create test file
+			testFile := filepath.Join(dir, "test.tf")
+			err = os.WriteFile(testFile, []byte(tc.content), 0644)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Parse new version
+			newIsVer, newVer, newConstr, err := version.ParseVersionOrRange(tc.newVersion)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Test updating the version
+			changed, oldVersion, newVersion, err := UpdateModuleVersionInFile(testFile, "test-module", newIsVer, newVer, newConstr, tc.newVersion, version.StrategyRange, false, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if changed != tc.wantChanged {
+				t.Errorf("changed = %v, want %v", changed, tc.wantChanged)
+			}
+			if oldVersion != tc.wantOld {
+				t.Errorf("oldVersion = %q, want %q", oldVersion, tc.wantOld)
+			}
+			if newVersion != tc.wantNew {
+				t.Errorf("newVersion = %q, want %q", newVersion, tc.wantNew)
+			}
+		})
+	}
+
 	// Create a test file
 	testFile := filepath.Join(dir, "test.tf")
 	content := `

@@ -335,6 +335,137 @@ modules:
       prd: "2.1.0"         # Simple exact version
 ```
 
+## Usage Examples
+
+### 1. Basic Update
+By default, the tool scans the `work` directory in your current path:
+```bash
+hclsemver -config versions.yaml
+```
+
+### 2. Custom Directory
+You can specify a different directory to scan:
+```bash
+hclsemver -config versions.yaml -dir infrastructure
+```
+
+### 3. Dry Run
+```bash
+hclsemver -config versions.yaml -dry-run
+```
+
+### 4. Sourcegraph Integration
+HCL Version Updater can be integrated with Sourcegraph batch changes to automate version updates across multiple repositories. Here's an example:
+
+```yaml
+name: INFRA-1234
+description: >
+  Update infrastructure module versions across development environments.
+  This batch change targets repositories in the infrastructure organization
+  that contain Terraform files in development paths.
+
+on:
+  - repositoriesMatchingQuery: >
+      context:global
+      repo:^github\.com/infrastructure/.*
+      file:(development|dev)/.*\.tf$
+      fork:no
+      archived:no
+      (
+        content:"registry.terraform.io/hashicorp"
+        OR content:"github.com/infrastructure"
+        OR content:"terraform.custom-registry.com"
+      )
+      count:all
+      timeout:1200s
+
+steps:
+  - run: |
+      #!/bin/sh
+      cat > /app/versions.yaml << 'EOF'
+      modules:
+        - source: "registry.terraform.io/hashicorp/aws/eks"
+          strategy: "range"    # Use ranges for development
+          force: true         # Add version if missing
+          versions:
+            "*":              # Default for all tiers
+              strategy: "range"
+              version: "20.0.0"
+            dev:             # Override for dev
+              strategy: "range"
+              version: "21.0.0"
+              force: true
+
+        - source: "github.com/infrastructure/networking"
+          strategy: "dynamic"  # Preserve existing style
+          versions:
+            dev:
+              strategy: "range"
+              version: ">=5.0.0,<6.0.0"
+            "*":
+              strategy: "exact"
+              version: "4.2.1"
+
+        - source: "terraform.custom-registry.com/security/.*"  # Regex pattern
+          versions:
+            dev:
+              strategy: "exact"
+              version: "3.1.0"
+              force: true     # Add version if missing
+            "*":
+              strategy: "range"
+              version: "2.0.0"
+              force: false    # Skip if version missing
+
+        - source: "registry.terraform.io/hashicorp/kubernetes"
+          strategy: "exact"   # Always use exact versions
+          force: false       # Skip if version missing
+          versions:
+            dev: "2.23.0"
+            "*": "2.22.0"    # For any other tier
+
+        - source: "terraform.custom-registry.com/monitoring/.*"
+          strategy: "dynamic"
+          versions:
+            dev:
+              strategy: "range"    # Use ranges in dev
+              version: "4.0.0"     # Will become >=4.0.0,<5.0.0
+              force: true
+            "*":
+              strategy: "exact"    # Use exact versions elsewhere
+              version: "3.2.1"
+              force: false
+      EOF
+
+      /app/hclsemver -config /app/versions.yaml
+
+    container: david1155/hclsemver:v0.1.1
+
+changesetTemplate:
+  title: 'INFRA-1234: Update Terraform module versions'
+  body: |
+    This batch change updates Terraform module versions across development environments.
+    
+    Changes include:
+    - EKS module updated to use version ranges (>=20.0.0,<21.0.0)
+    - Networking module versions aligned with new architecture
+    - Security modules pinned to exact versions in dev
+    - Kubernetes provider version bumped to 2.23.0
+    - Monitoring modules configured with flexible versioning strategy
+    
+    Testing:
+    - [ ] Terraform plan executed successfully
+    - [ ] Integration tests passed
+    - [ ] Security scan completed
+    
+    Related:
+    - [INFRA-1234](https://jira.company.com/browse/INFRA-1234)
+    - [RFC-789](https://docs.company.com/rfcs/789)
+  branch: infra-1234-module-versions
+  commit:
+    message: 'INFRA-1234: Update Terraform module versions'
+```
+
 ## Directory Structure Support
 
 HCL Version Updater works with various directory organizations. By default, it looks in the `work` directory, but you can override this with the `-dir` flag.
@@ -383,25 +514,6 @@ work/  # or custom directory
     │   └── main.tf
     └── prd/
         └── main.tf
-```
-
-## Usage Examples
-
-### 1. Basic Update
-By default, the tool scans the `work` directory in your current path:
-```bash
-hclsemver -config versions.yaml
-```
-
-### 2. Custom Directory
-You can specify a different directory to scan:
-```bash
-hclsemver -config versions.yaml -dir infrastructure
-```
-
-### 3. Dry Run
-```bash
-hclsemver -config versions.yaml -dry-run
 ```
 
 ## Version Format Support
