@@ -100,9 +100,33 @@ func DecideVersionOrRange(
 func ApplyVersionStrategy(strategy Strategy, targetVersion string, existingVersion string) (string, error) {
 	switch strategy {
 	case StrategyExact:
-		return ConvertToExactVersion(targetVersion)
+		// First, parse both versions
+		targetVer, err := semver.NewVersion(targetVersion)
+		if err != nil {
+			return "", fmt.Errorf("exact strategy requires an exact version (e.g., '2.1.1'), got: %s", targetVersion)
+		}
+
+		// If no existing version, use target version
+		if existingVersion == "" {
+			return targetVer.String(), nil
+		}
+
+		// Parse existing version
+		existingVer, err := semver.NewVersion(existingVersion)
+		if err != nil {
+			// If existing version is invalid, use target version
+			return targetVer.String(), nil
+		}
+
+		// For backward compatibility protection, if existing version is higher, keep it
+		if existingVer.GreaterThan(targetVer) {
+			return existingVer.String(), nil
+		}
+
+		return targetVer.String(), nil
+
 	case StrategyRange:
-		return ConvertToRangeVersion(targetVersion)
+		return ApplyRangeStrategy(targetVersion, existingVersion)
 	case StrategyDynamic:
 		return ApplyDynamicStrategy(targetVersion, existingVersion)
 	default:
@@ -120,7 +144,7 @@ func ConvertToExactVersion(version string) (string, error) {
 }
 
 func ConvertToRangeVersion(version string) (string, error) {
-	// If it's already a range, return as is
+	// If it's already a range, normalize and return as is
 	if _, err := semver.NewConstraint(version); err == nil && strings.Contains(version, ">") {
 		// Normalize the version string
 		return normalizeVersionString(version), nil
@@ -134,6 +158,55 @@ func ConvertToRangeVersion(version string) (string, error) {
 
 	// Convert to range >=current,<next-major with consistent spacing
 	return normalizeVersionString(fmt.Sprintf(">=%s,<%d.0.0", v.String(), v.Major()+1)), nil
+}
+
+func ApplyRangeStrategy(targetVersion, existingVersion string) (string, error) {
+	// If no existing version, convert target to range
+	if existingVersion == "" {
+		// Expand tilde arrow notation first
+		expandedTarget := ExpandTerraformTildeArrow(targetVersion)
+		return ConvertToRangeVersion(expandedTarget)
+	}
+
+	// Expand tilde arrow notation
+	expandedTarget := ExpandTerraformTildeArrow(targetVersion)
+	expandedExisting := ExpandTerraformTildeArrow(existingVersion)
+
+	// Parse target version
+	targetIsVer, targetVer, targetRange, err := ParseVersionOrRange(expandedTarget)
+	if err != nil {
+		return "", fmt.Errorf("invalid target version: %w", err)
+	}
+
+	// Parse existing version
+	existingIsVer, _, existingRange, err := ParseVersionOrRange(expandedExisting)
+	if err != nil {
+		// If existing version is invalid, convert target to range
+		return ConvertToRangeVersion(expandedTarget)
+	}
+
+	// If existing is a range and target is a version that fits in it, keep existing range
+	if !existingIsVer && existingRange != nil && targetIsVer && targetVer != nil {
+		if existingRange.Check(targetVer) {
+			return normalizeVersionString(expandedExisting), nil
+		}
+	}
+
+	// If existing is a range with higher minimum version, keep it
+	if !existingIsVer && existingRange != nil && targetIsVer && targetVer != nil {
+		existingMinVer := findLowestVersionInRange(existingRange)
+		if existingMinVer != nil && existingMinVer.GreaterThan(targetVer) {
+			return normalizeVersionString(expandedExisting), nil
+		}
+	}
+
+	// If target is already a range, normalize and return it
+	if !targetIsVer && targetRange != nil {
+		return normalizeVersionString(expandedTarget), nil
+	}
+
+	// Otherwise convert target to range
+	return ConvertToRangeVersion(expandedTarget)
 }
 
 func ApplyDynamicStrategy(targetVersion, existingVersion string) (string, error) {
