@@ -181,8 +181,12 @@ func UpdateModuleVersionInFile(
 		}
 		newVersion = finalVersion
 
-		// Only update if the version has actually changed
-		if oldVersion != finalVersion {
+		// Normalize both versions for comparison
+		normalizedOld := version.NormalizeVersionString(oldVersion)
+		normalizedNew := version.NormalizeVersionString(finalVersion)
+
+		// Only update if the normalized versions are different
+		if normalizedOld != normalizedNew {
 			// Update the version attribute
 			block.Body().SetAttributeValue("version", cty.StringVal(finalVersion))
 			changed = true
@@ -190,7 +194,7 @@ func UpdateModuleVersionInFile(
 	}
 
 	if !changed {
-		return false, "", "", nil
+		return false, oldVersion, "", nil
 	}
 
 	if !dryRun {
