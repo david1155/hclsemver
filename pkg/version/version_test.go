@@ -399,6 +399,34 @@ func TestVersionStrategies(t *testing.T) {
 			existingVersion: "1.0.0",
 			wantErr:         true,
 		},
+		{
+			name:            "exact: pre-release version",
+			strategy:        StrategyExact,
+			targetVersion:   "2.0.0-beta.1",
+			existingVersion: "2.0.0-alpha.2",
+			want:            "2.0.0-beta.1",
+		},
+		{
+			name:            "exact: pre-release with build metadata",
+			strategy:        StrategyExact,
+			targetVersion:   "2.0.0-beta.1+build123",
+			existingVersion: "2.0.0-alpha.2+build456",
+			want:            "2.0.0-beta.1+build123",
+		},
+		{
+			name:            "exact: version with build metadata only",
+			strategy:        StrategyExact,
+			targetVersion:   "2.0.0+build123",
+			existingVersion: "2.0.0+build456",
+			want:            "2.0.0+build123",
+		},
+		{
+			name:            "exact: version 0.x.x handling",
+			strategy:        StrategyExact,
+			targetVersion:   "0.2.0",
+			existingVersion: "0.1.0",
+			want:            "0.2.0",
+		},
 
 		// Range strategy tests
 		{
@@ -421,6 +449,265 @@ func TestVersionStrategies(t *testing.T) {
 			targetVersion:   "invalid",
 			existingVersion: "1.0.0",
 			wantErr:         true,
+		},
+		{
+			name:            "range: existing range -> keep range (target within)",
+			strategy:        StrategyRange,
+			targetVersion:   "2.1.0",
+			existingVersion: ">= 2.0.0, < 3",
+			want:            ">= 2.0.0, < 3",
+		},
+		{
+			name:            "range: existing range -> keep range (target within, more specific)",
+			strategy:        StrategyRange,
+			targetVersion:   "6.2.0",
+			existingVersion: ">= 6.0.0, < 7",
+			want:            ">= 6.0.0, < 7",
+		},
+		{
+			name:            "range: existing range -> new range (target outside)",
+			strategy:        StrategyRange,
+			targetVersion:   "3.0.0",
+			existingVersion: ">= 2.0.0, < 3",
+			want:            ">= 3.0.0, < 4.0.0",
+		},
+		{
+			name:            "range: pre-release version in target",
+			strategy:        StrategyRange,
+			targetVersion:   "2.0.0-beta.1",
+			existingVersion: "",
+			want:            ">= 2.0.0-beta.1, < 3.0.0",
+		},
+		{
+			name:            "range: pre-release version in existing",
+			strategy:        StrategyRange,
+			targetVersion:   "2.1.0",
+			existingVersion: ">= 2.0.0-beta.1, < 3.0.0",
+			want:            ">= 2.0.0-beta.1, < 3.0.0",
+		},
+		{
+			name:            "range: tilde arrow in target",
+			strategy:        StrategyRange,
+			targetVersion:   "~> 2.0",
+			existingVersion: "",
+			want:            ">= 2.0.0, < 3.0.0",
+		},
+		{
+			name:            "range: tilde arrow in existing",
+			strategy:        StrategyRange,
+			targetVersion:   "2.1.0",
+			existingVersion: "~> 2.0",
+			want:            ">= 2.0.0, < 3.0.0",
+		},
+		{
+			name:            "range: complex range with OR",
+			strategy:        StrategyRange,
+			targetVersion:   ">= 1.0.0, < 2.0.0 || >= 3.0.0, < 4.0.0",
+			existingVersion: "",
+			want:            ">= 1.0.0, < 2.0.0 || >= 3.0.0, < 4.0.0",
+		},
+		{
+			name:            "range: spaces in range",
+			strategy:        StrategyRange,
+			targetVersion:   ">=2.0.0,<3.0.0",
+			existingVersion: "",
+			want:            ">= 2.0.0, < 3.0.0",
+		},
+		{
+			name:            "range: existing range with higher minimum",
+			strategy:        StrategyRange,
+			targetVersion:   "2.0.0",
+			existingVersion: ">= 2.1.0, < 3.0.0",
+			want:            ">= 2.1.0, < 3.0.0",
+		},
+		{
+			name:            "range: existing range with higher maximum",
+			strategy:        StrategyRange,
+			targetVersion:   "2.0.0",
+			existingVersion: ">= 1.0.0, < 4.0.0",
+			want:            ">= 1.0.0, < 4.0.0",
+		},
+		{
+			name:            "range: empty string target",
+			strategy:        StrategyRange,
+			targetVersion:   "",
+			existingVersion: ">= 1.0.0, < 2.0.0",
+			wantErr:         true,
+		},
+		{
+			name:            "range: empty string existing",
+			strategy:        StrategyRange,
+			targetVersion:   "2.0.0",
+			existingVersion: "",
+			want:            ">= 2.0.0, < 3.0.0",
+		},
+		{
+			name:            "dynamic: complex OR conditions",
+			strategy:        StrategyDynamic,
+			targetVersion:   ">= 1.0.0, < 2.0.0 || >= 3.0.0, < 4.0.0",
+			existingVersion: ">= 2.0.0, < 3.0.0 || >= 4.0.0, < 5.0.0",
+			want:            ">= 2.0.0, < 3.0.0 || >= 4.0.0, < 5.0.0", // maintain backward compatibility
+		},
+		{
+			name:            "dynamic: pre-release with build metadata",
+			strategy:        StrategyDynamic,
+			targetVersion:   "2.0.0-beta.1+build123",
+			existingVersion: "2.0.0-alpha.2+build456",
+			want:            "2.0.0-beta.1+build123", // newer pre-release version should be used
+		},
+		{
+			name:            "dynamic: multiple tilde arrow combinations",
+			strategy:        StrategyDynamic,
+			targetVersion:   "~>2.0.0 || ~>3.0",
+			existingVersion: "~>1.0 || ~>2.1",
+			want:            ">= 1.0.0, < 2.0.0 || >= 2.1.0, < 3.0.0", // expanded format of tilde arrow
+		},
+		{
+			name:            "dynamic: version 0.x.x handling",
+			strategy:        StrategyDynamic,
+			targetVersion:   "0.2.0",
+			existingVersion: "0.1.5",
+			want:            "0.2.0", // in 0.x.x, minor version changes are allowed
+		},
+		{
+			name:            "dynamic: version 0.x.x range handling",
+			strategy:        StrategyDynamic,
+			targetVersion:   ">=0.2.0,<0.3.0",
+			existingVersion: ">=0.1.0,<0.2.0",
+			want:            ">= 0.2.0, < 0.3.0", // in 0.x.x, minor version changes are allowed
+		},
+		{
+			name:            "range: version 0.x.x handling",
+			strategy:        StrategyRange,
+			targetVersion:   "0.2.0",
+			existingVersion: "0.1.5",
+			want:            ">= 0.2.0, < 1.0.0", // in 0.x.x, minor version changes are allowed
+		},
+		{
+			name:            "range: version 0.x.x with pre-release",
+			strategy:        StrategyRange,
+			targetVersion:   "0.2.0-beta.1",
+			existingVersion: "0.1.5-alpha.2",
+			want:            ">= 0.2.0-beta.1, < 1.0.0", // in 0.x.x with pre-release
+		},
+		{
+			name:            "range: complex OR conditions",
+			strategy:        StrategyRange,
+			targetVersion:   ">= 1.0.0, < 2.0.0 || >= 3.0.0, < 4.0.0",
+			existingVersion: ">= 2.0.0, < 3.0.0 || >= 4.0.0, < 5.0.0",
+			want:            ">= 1.0.0, < 2.0.0 || >= 3.0.0, < 4.0.0", // prefer target version's range
+		},
+		{
+			name:            "range: complex OR with pre-release",
+			strategy:        StrategyRange,
+			targetVersion:   ">= 1.0.0-beta.1, < 2.0.0 || >= 3.0.0-rc.1, < 4.0.0",
+			existingVersion: ">= 2.0.0-alpha.1, < 3.0.0 || >= 4.0.0-beta.2, < 5.0.0",
+			want:            ">= 1.0.0-beta.1, < 2.0.0 || >= 3.0.0-rc.1, < 4.0.0", // prefer target version's range with pre-release
+		},
+		{
+			name:            "exact: invalid version format",
+			strategy:        StrategyExact,
+			targetVersion:   "2.0.x",
+			existingVersion: "2.0.0",
+			wantErr:         true,
+		},
+		{
+			name:            "range: complex version constraints",
+			strategy:        StrategyRange,
+			targetVersion:   ">=1.2.3-beta.1,<2.0.0-rc.1 || >=2.1.0,<3.0.0",
+			existingVersion: ">=1.0.0,<2.0.0 || >=3.0.0,<4.0.0",
+			want:            ">= 1.2.3-beta.1, < 2.0.0-rc.1 || >= 2.1.0, < 3.0.0",
+		},
+		{
+			name:            "dynamic: complex version constraints with backward compatibility",
+			strategy:        StrategyDynamic,
+			targetVersion:   ">=1.0.0-beta.1,<2.0.0 || >=2.1.0,<3.0.0",
+			existingVersion: ">=1.5.0-rc.1,<2.0.0 || >=3.0.0,<4.0.0",
+			want:            ">= 1.5.0-rc.1, < 2.0.0 || >= 3.0.0, < 4.0.0", // maintain backward compatibility
+		},
+		{
+			name:            "dynamic: mixed version formats",
+			strategy:        StrategyDynamic,
+			targetVersion:   "~>1.2.3 || >=2.0.0,<3.0.0",
+			existingVersion: ">=1.5.0,<2.0.0 || ~>3.0",
+			want:            ">= 1.5.0, < 2.0.0 || >= 3.0.0, < 4.0.0", // maintain backward compatibility and normalize format
+		},
+		{
+			name:            "range: exclusive vs inclusive bounds",
+			strategy:        StrategyRange,
+			targetVersion:   ">2.0.0,<=3.0.0",
+			existingVersion: ">=2.0.0,<3.0.0",
+			want:            "> 2.0.0, <= 3.0.0",
+		},
+		{
+			name:            "dynamic: exclusive vs inclusive bounds",
+			strategy:        StrategyDynamic,
+			targetVersion:   ">2.0.0,<=3.0.0",
+			existingVersion: ">=2.0.0,<3.0.0",
+			want:            ">= 2.0.0, < 3.0.0", // keep existing for consistency
+		},
+		{
+			name:            "range: mixed bounds with pre-release",
+			strategy:        "range",
+			targetVersion:   ">2.0.0-beta,<=3.0.0",
+			existingVersion: ">=2.0.0-alpha,<3.0.0-rc",
+			want:            "> 2.0.0-beta, <= 3.0.0",
+		},
+		{
+			name:            "exact: hardcoded 2.3.0 vs lower version",
+			strategy:        StrategyExact,
+			targetVersion:   "2.3.0",
+			existingVersion: "2.2.0",
+			want:            "2.3.0",
+		},
+		{
+			name:            "exact: hardcoded 2.3.0 vs higher version",
+			strategy:        StrategyExact,
+			targetVersion:   "2.3.0",
+			existingVersion: "2.4.0",
+			want:            "2.4.0",
+		},
+		{
+			name:            "range: hardcoded 2.3.0 vs inclusive range",
+			strategy:        StrategyRange,
+			targetVersion:   "2.3.0",
+			existingVersion: ">= 2.0.0, < 3.0.0",
+			want:            ">= 2.0.0, < 3.0.0",
+		},
+		{
+			name:            "range: hardcoded 2.3.0 vs exclusive range",
+			strategy:        StrategyRange,
+			targetVersion:   "2.3.0",
+			existingVersion: ">= 1.0.0, < 2.0.0",
+			want:            ">= 2.3.0, < 3.0.0",
+		},
+		{
+			name:            "dynamic: hardcoded 2.3.0 vs lower version",
+			strategy:        StrategyDynamic,
+			targetVersion:   "2.3.0",
+			existingVersion: "2.2.0",
+			want:            "2.3.0",
+		},
+		{
+			name:            "dynamic: hardcoded 2.3.0 vs higher version",
+			strategy:        StrategyDynamic,
+			targetVersion:   "2.3.0",
+			existingVersion: "2.4.0",
+			want:            "2.4.0",
+		},
+		{
+			name:            "dynamic: hardcoded 2.3.0 vs inclusive range",
+			strategy:        StrategyDynamic,
+			targetVersion:   "2.3.0",
+			existingVersion: ">= 2.0.0, < 3.0.0",
+			want:            ">= 2.0.0, < 3.0.0",
+		},
+		{
+			name:            "dynamic: hardcoded 2.3.0 vs exclusive range",
+			strategy:        StrategyDynamic,
+			targetVersion:   "2.3.0",
+			existingVersion: ">= 1.0.0, < 2.0.0",
+			want:            ">= 2, < 3",
 		},
 	}
 
