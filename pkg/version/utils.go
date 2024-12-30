@@ -26,16 +26,34 @@ func atoi(s string) int {
 
 // normalizeVersionString ensures consistent formatting of version strings
 func normalizeVersionString(version string) string {
+	// Handle complex ranges with OR
+	if strings.Contains(version, "||") {
+		parts := strings.Split(version, "||")
+		for i, part := range parts {
+			parts[i] = normalizeVersionString(strings.TrimSpace(part))
+		}
+		return strings.Join(parts, " || ")
+	}
+
 	// Remove all spaces first
 	version = strings.ReplaceAll(version, " ", "")
 
 	// Add spaces after operators and commas
 	version = strings.ReplaceAll(version, ">=", ">= ")
+	version = strings.ReplaceAll(version, "<=", "<= ")
+	version = strings.ReplaceAll(version, ">", "> ")
 	version = strings.ReplaceAll(version, "<", "< ")
 	version = strings.ReplaceAll(version, ",", ", ")
 
-	// Remove any trailing spaces
+	// Fix any incorrect spacing
+	version = strings.ReplaceAll(version, "> =", ">=")
+	version = strings.ReplaceAll(version, "< =", "<=")
+
+	// Remove extra spaces
 	version = strings.TrimSpace(version)
+	for strings.Contains(version, "  ") {
+		version = strings.ReplaceAll(version, "  ", " ")
+	}
 
 	return version
 }
