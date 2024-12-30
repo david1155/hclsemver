@@ -1,3 +1,17 @@
+## [0.1.3] - 2024-12-30
+
+### Bug Fixes
+- Fixed version comparison in exact strategy to properly handle backward compatibility
+- Improved handling of pre-release versions and build metadata
+- Enhanced version range strategy to respect existing ranges when appropriate
+- Fixed version 0.x.x handling with proper semver semantics
+- Improved version string normalization for complex ranges with OR conditions
+
+### Enhancements
+- Added comprehensive handling of complex version ranges
+- Improved handling of tilde arrow notation in version ranges
+- Enhanced backward compatibility protection in version strategies
+
 ## [0.1.2] - 2024-12-30
 
 ### Performance Improvements
