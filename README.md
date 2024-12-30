@@ -13,9 +13,19 @@ HCL Version Updater automates version management across your infrastructure code
 
 ## Installation
 
+You can install HCL Version Updater using one of the following methods:
+
+### Install via Go
+
 ```bash
-go install github.com/david1155/hclsemver@latest
+go install github.com/david1155/hclsemver/cmd/hclsemver@latest
 ```
+
+### Download Pre-built Binary
+
+You can download pre-built binaries from the [Releases page](https://github.com/david1155/hclsemver/releases/). Choose the appropriate binary for your operating system and architecture, then add it to your system's `PATH`.
+
+### Use Docker Image
 
 Alternatively, you can use the Docker image:
 
