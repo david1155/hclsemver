@@ -4,9 +4,6 @@ on:
   release:
     types: [created]
 
-# Only run this workflow on GitHub Enterprise
-if: github.server_url == 'https://git.zoominfo.com'
-
 permissions: write-all
 
 jobs:
