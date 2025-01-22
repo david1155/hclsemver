@@ -1,3 +1,18 @@
+## [0.1.5] - 2025-01-22
+
+### Added
+- Enhanced tier configuration with wildcard support:
+  - Added "*" wildcard tier to process all files regardless of location
+  - Support for tier-specific overrides when using wildcard
+  - Process files in any directory structure or naming pattern
+  - Improved tier matching logic for better control over file processing
+
+### Changed
+- Modified tier processing behavior:
+  - Specific tier settings now take precedence over wildcard
+  - Simplified configuration by allowing "*" as default with overrides
+  - More intuitive handling of tier-specific settings
+
 ## [0.1.4] - 2025-01-22
 
 ### Added
