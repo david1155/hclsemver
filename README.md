@@ -18,7 +18,7 @@ You can install HCL Version Updater using one of the following methods:
 ### Install via Go
 
 ```bash
-go install github.com/david1155/hclsemver/cmd/hclsemver@v0.1.3
+go install github.com/david1155/hclsemver/cmd/hclsemver@v0.1.4
 ```
 
 ### Download Pre-built Binary
@@ -30,7 +30,7 @@ You can download pre-built binaries from the [Releases page](https://github.com/
 Alternatively, you can use the Docker image:
 
 ```bash
-docker pull david1155/hclsemver:v0.1.3
+docker pull david1155/hclsemver:v0.1.4
 # Mount your current directory to /work (default directory)
 docker run -v $(pwd):/work david1155/hclsemver [flags]
 ```
@@ -449,7 +449,7 @@ steps:
 
       /app/hclsemver -config /app/versions.yaml
 
-    container: david1155/hclsemver:v0.1.3
+    container: david1155/hclsemver:v0.1.4
 
 changesetTemplate:
   title: 'INFRA-1234: Update Terraform module versions'
