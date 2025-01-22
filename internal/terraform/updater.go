@@ -23,17 +23,32 @@ func ShouldProcessTier(path string, configTiers map[string]bool) bool {
 
 	// Extract potential tier from path
 	parts := strings.Split(path, string(os.PathSeparator))
+
+	// First check for specific tier matches
 	for _, part := range parts {
-		// Check if any configured tier is part of the path component
 		for tier := range configTiers {
+			if tier == "*" {
+				continue
+			}
 			// Check if tier is a directory name or part of the filename
 			if part == tier || strings.Contains(part, tier) {
-				return true
+				return configTiers[tier] // Return the specific tier's setting
 			}
 		}
 	}
 
-	// If no tier matches were found in the path, process only if we're not in a tier-specific config
+	// If we have only "*" configured, use its value
+	if len(configTiers) == 1 && configTiers["*"] {
+		return true
+	}
+
+	// If we have specific tiers and "*", and no specific tier matched,
+	// use "*" as the default
+	if wildcardValue, hasWildcard := configTiers["*"]; hasWildcard {
+		return wildcardValue
+	}
+
+	// If no tier matches were found and no wildcard, don't process
 	return false
 }
 

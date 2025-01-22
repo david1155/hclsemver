@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/david1155/hclsemver/pkg/version"
 )
 
@@ -499,6 +500,41 @@ func TestShouldProcessTier(t *testing.T) {
 			},
 			want: true,
 		},
+		{
+			name: "wildcard tier only",
+			path: "/work/any/path/file.tf",
+			configTiers: map[string]bool{
+				"*": true,
+			},
+			want: true,
+		},
+		{
+			name: "wildcard tier with specific tier - specific tier path",
+			path: "/work/dev/module/file.tf",
+			configTiers: map[string]bool{
+				"*":   true,
+				"dev": false,
+			},
+			want: false, // Specific tier setting takes precedence
+		},
+		{
+			name: "wildcard tier with specific tier - other path",
+			path: "/work/other/module/file.tf",
+			configTiers: map[string]bool{
+				"*":   true,
+				"dev": false,
+			},
+			want: true, // Uses wildcard for non-matching paths
+		},
+		{
+			name: "wildcard tier should not match as string",
+			path: "/work/*/module/file.tf",
+			configTiers: map[string]bool{
+				"dev": true,
+				"prd": true,
+			},
+			want: false,
+		},
 	}
 
 	for _, tc := range tests {
@@ -569,6 +605,216 @@ func TestMatchModuleSource(t *testing.T) {
 			if got != tt.want {
 				t.Errorf("matchModuleSource(%q, %q) = %v, want %v",
 					tt.source, tt.pattern, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestScanAndUpdateModules_Tiers(t *testing.T) {
+	// Create a temporary test directory structure
+	tmpDir := t.TempDir()
+
+	// Create test directory structure
+	dirs := []string{"dev", "stg", "prd", "other", "random/nested/path", "some/other/location"}
+	for _, dir := range dirs {
+		err := os.MkdirAll(filepath.Join(tmpDir, dir), 0755)
+		if err != nil {
+			t.Fatalf("Failed to create directory: %v", err)
+		}
+	}
+
+	// Create test files
+	testFiles := map[string]string{
+		"dev/main.tf": `
+module "test" {
+  source  = "hashicorp/test-module/aws"
+  version = "1.0.0"
+}`,
+		"stg/main.tf": `
+module "test" {
+  source  = "hashicorp/test-module/aws"
+  version = "1.0.0"
+}`,
+		"prd/main.tf": `
+module "test" {
+  source  = "hashicorp/test-module/aws"
+  version = "1.0.0"
+}`,
+		"other/main.tf": `
+module "test" {
+  source  = "hashicorp/test-module/aws"
+  version = "1.0.0"
+}`,
+		"random/nested/path/resources.tf": `
+module "test" {
+  source  = "hashicorp/test-module/aws"
+  version = "1.0.0"
+}`,
+		"some/other/location/terraform.tf": `
+module "test" {
+  source  = "hashicorp/test-module/aws"
+  version = "1.0.0"
+}`,
+	}
+
+	for path, content := range testFiles {
+		fullPath := filepath.Join(tmpDir, path)
+		err := os.WriteFile(fullPath, []byte(content), 0644)
+		if err != nil {
+			t.Fatalf("Failed to create test file: %v", err)
+		}
+	}
+
+	// Test cases
+	tests := []struct {
+		name        string
+		configTiers map[string]bool
+		wantChanged map[string]bool
+	}{
+		{
+			name: "specific tiers only",
+			configTiers: map[string]bool{
+				"dev": true,
+				"stg": true,
+				"prd": true,
+			},
+			wantChanged: map[string]bool{
+				"dev/main.tf":   true,
+				"stg/main.tf":   true,
+				"prd/main.tf":   true,
+				"other/main.tf": false,
+			},
+		},
+		{
+			name: "dev tier only",
+			configTiers: map[string]bool{
+				"dev": true,
+			},
+			wantChanged: map[string]bool{
+				"dev/main.tf":   true,
+				"stg/main.tf":   false,
+				"prd/main.tf":   false,
+				"other/main.tf": false,
+			},
+		},
+		{
+			name: "wildcard tier",
+			configTiers: map[string]bool{
+				"*": true,
+			},
+			wantChanged: map[string]bool{
+				"dev/main.tf":                      true,
+				"stg/main.tf":                      true,
+				"prd/main.tf":                      true,
+				"other/main.tf":                    true,
+				"random/nested/path/resources.tf":  true,
+				"some/other/location/terraform.tf": true,
+			},
+		},
+		{
+			name: "wildcard as default with different version for dev",
+			configTiers: map[string]bool{
+				"*":   true,  // Default for all tiers
+				"dev": false, // Dev tier should not be processed
+			},
+			wantChanged: map[string]bool{
+				"dev/main.tf":   false, // Should not change due to specific tier setting
+				"stg/main.tf":   true,  // Should change due to wildcard
+				"prd/main.tf":   true,  // Should change due to wildcard
+				"other/main.tf": true,  // Should change due to wildcard
+			},
+		},
+		{
+			name:        "empty tiers (should process all)",
+			configTiers: map[string]bool{},
+			wantChanged: map[string]bool{
+				"dev/main.tf":   true,
+				"stg/main.tf":   true,
+				"prd/main.tf":   true,
+				"other/main.tf": true,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// First, ensure all files have original content
+			for filePath, content := range testFiles {
+				fullPath := filepath.Join(tmpDir, filePath)
+				err := os.WriteFile(fullPath, []byte(content), 0644)
+				if err != nil {
+					t.Fatalf("Failed to reset file: %v", err)
+				}
+			}
+
+			if tt.name == "wildcard as default with different version for dev" {
+				// Call ScanAndUpdateModules once with both wildcard and specific tier
+				err := ScanAndUpdateModules(
+					tmpDir,
+					"test-module/aws",
+					true,
+					semver.MustParse("2.0.0"),
+					nil,
+					"2.0.0",
+					tt.configTiers,
+					version.StrategyExact,
+					false,
+					false,
+				)
+				if err != nil {
+					t.Fatalf("ScanAndUpdateModules failed: %v", err)
+				}
+
+				// Verify the versions
+				for filePath, shouldChange := range tt.wantChanged {
+					fullPath := filepath.Join(tmpDir, filePath)
+					content, err := os.ReadFile(fullPath)
+					if err != nil {
+						t.Fatalf("Failed to read file: %v", err)
+					}
+
+					if shouldChange {
+						if !strings.Contains(string(content), `version = "2.0.0"`) {
+							t.Errorf("File %s: expected version 2.0.0", filePath)
+						}
+					} else {
+						if !strings.Contains(string(content), `version = "1.0.0"`) {
+							t.Errorf("File %s: expected version 1.0.0", filePath)
+						}
+					}
+				}
+				return
+			}
+
+			// Call ScanAndUpdateModules once for other test cases
+			err := ScanAndUpdateModules(
+				tmpDir,
+				"test-module/aws",
+				true,
+				semver.MustParse("2.0.0"),
+				nil,
+				"2.0.0",
+				tt.configTiers,
+				version.StrategyExact,
+				false,
+				false,
+			)
+			if err != nil {
+				t.Fatalf("ScanAndUpdateModules failed: %v", err)
+			}
+
+			// Then check all files
+			for filePath, shouldChange := range tt.wantChanged {
+				fullPath := filepath.Join(tmpDir, filePath)
+				updatedContent, err := os.ReadFile(fullPath)
+				if err != nil {
+					t.Fatalf("Failed to read file: %v", err)
+				}
+
+				wasChanged := string(updatedContent) != testFiles[filePath]
+				if wasChanged != shouldChange {
+					t.Errorf("File %s: expected changed=%v, got changed=%v", filePath, shouldChange, wasChanged)
+				}
 			}
 		})
 	}
