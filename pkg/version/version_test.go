@@ -570,27 +570,6 @@ func TestVersionStrategies(t *testing.T) {
 			want:            "0.2.0", // in 0.x.x, minor version changes are allowed
 		},
 		{
-			name:            "dynamic: version 0.x.x range handling",
-			strategy:        StrategyDynamic,
-			targetVersion:   ">=0.2.0,<0.3.0",
-			existingVersion: ">=0.1.0,<0.2.0",
-			want:            ">= 0.2.0, < 0.3.0", // in 0.x.x, minor version changes are allowed
-		},
-		{
-			name:            "range: version 0.x.x handling",
-			strategy:        StrategyRange,
-			targetVersion:   "0.2.0",
-			existingVersion: "0.1.5",
-			want:            ">= 0.2.0, < 1.0.0", // in 0.x.x, minor version changes are allowed
-		},
-		{
-			name:            "range: version 0.x.x with pre-release",
-			strategy:        StrategyRange,
-			targetVersion:   "0.2.0-beta.1",
-			existingVersion: "0.1.5-alpha.2",
-			want:            ">= 0.2.0-beta.1, < 1.0.0", // in 0.x.x with pre-release
-		},
-		{
 			name:            "range: complex OR conditions",
 			strategy:        StrategyRange,
 			targetVersion:   ">= 1.0.0, < 2.0.0 || >= 3.0.0, < 4.0.0",
@@ -708,6 +687,259 @@ func TestVersionStrategies(t *testing.T) {
 			targetVersion:   "2.3.0",
 			existingVersion: ">= 1.0.0, < 2.0.0",
 			want:            ">= 2, < 3",
+		},
+		{
+			name:            "dynamic: pre-1.0 version should be kept as is",
+			strategy:        StrategyDynamic,
+			targetVersion:   "0.1.0",
+			existingVersion: "0.2.0",
+			want:            "0.2.0",
+		},
+		{
+			name:            "dynamic: pre-1.0 range should be kept as is",
+			strategy:        StrategyDynamic,
+			targetVersion:   ">=0.1.0,<0.2.0",
+			existingVersion: ">=0.2.0,<0.3.0",
+			want:            ">= 0.2.0, < 0.3.0",
+		},
+		{
+			name:            "range: pre-1.0 exact version should stay exact",
+			strategy:        StrategyRange,
+			targetVersion:   "0.2.1",
+			existingVersion: "",
+			want:            "0.2.1",
+		},
+		{
+			name:            "range: pre-1.0 exact version should stay exact when existing is exact",
+			strategy:        StrategyRange,
+			targetVersion:   "0.2.1",
+			existingVersion: "0.1.0",
+			want:            "0.2.1",
+		},
+		{
+			name:            "range: pre-1.0 exact version should stay exact when existing is range",
+			strategy:        StrategyRange,
+			targetVersion:   "0.2.1",
+			existingVersion: ">=0.1.0,<0.2.0",
+			want:            "0.2.1",
+		},
+		{
+			name:            "range: pre-1.0 range should convert to exact version",
+			strategy:        StrategyRange,
+			targetVersion:   ">=0.2.0,<0.3.0",
+			existingVersion: "",
+			want:            "0.2.0",
+		},
+		{
+			name:            "range: pre-1.0 range with existing exact should keep higher exact",
+			strategy:        StrategyRange,
+			targetVersion:   ">=0.2.0,<0.3.0",
+			existingVersion: "0.2.5",
+			want:            "0.2.5",
+		},
+		{
+			name:            "range: pre-1.0 range with existing range should convert to exact",
+			strategy:        StrategyRange,
+			targetVersion:   ">=0.2.0,<0.3.0",
+			existingVersion: ">=0.1.0,<0.2.0",
+			want:            "0.2.0",
+		},
+		{
+			name:            "range: pre-1.0 with pre-release should stay exact",
+			strategy:        StrategyRange,
+			targetVersion:   "0.2.1-beta.1",
+			existingVersion: "",
+			want:            "0.2.1-beta.1",
+		},
+		{
+			name:            "range: pre-1.0 with build metadata should stay exact",
+			strategy:        StrategyRange,
+			targetVersion:   "0.2.1+build123",
+			existingVersion: "",
+			want:            "0.2.1+build123",
+		},
+		{
+			name:            "range: pre-1.0 with complex range should convert to exact",
+			strategy:        StrategyRange,
+			targetVersion:   ">=0.2.0,<0.3.0 || >=0.4.0,<0.5.0",
+			existingVersion: "",
+			want:            "0.2.0",
+		},
+		{
+			name:            "range: pre-1.0 tilde arrow should convert to exact",
+			strategy:        StrategyRange,
+			targetVersion:   "~>0.2",
+			existingVersion: "",
+			want:            "0.2.0",
+		},
+		{
+			name:            "range: pre-1.0 to post-1.0 range should split at 1.0",
+			strategy:        StrategyRange,
+			targetVersion:   ">=0.5.0,<1.5.0",
+			existingVersion: "",
+			want:            "0.5.0",
+		},
+		{
+			name:            "dynamic: pre-1.0 exact version should stay exact",
+			strategy:        StrategyDynamic,
+			targetVersion:   "0.2.1",
+			existingVersion: "",
+			want:            "0.2.1",
+		},
+		{
+			name:            "dynamic: pre-1.0 range should convert to exact",
+			strategy:        StrategyDynamic,
+			targetVersion:   ">=0.2.0,<0.3.0",
+			existingVersion: "",
+			want:            "0.2.0",
+		},
+		{
+			name:            "dynamic: pre-1.0 exact with existing range should stay exact",
+			strategy:        StrategyDynamic,
+			targetVersion:   "0.2.1",
+			existingVersion: ">=0.1.0,<0.2.0",
+			want:            "0.2.1",
+		},
+		{
+			name:            "dynamic: pre-1.0 range with existing exact should keep higher",
+			strategy:        StrategyDynamic,
+			targetVersion:   ">=0.2.0,<0.3.0",
+			existingVersion: "0.2.5",
+			want:            "0.2.5",
+		},
+		// Zero version (0.0.x) handling tests
+		{
+			name:            "exact: zero version handling",
+			strategy:        StrategyExact,
+			targetVersion:   "0.0.1",
+			existingVersion: "0.0.2",
+			want:            "0.0.2",
+		},
+		{
+			name:            "exact: zero version with higher target",
+			strategy:        StrategyExact,
+			targetVersion:   "0.0.3",
+			existingVersion: "0.0.1",
+			want:            "0.0.3",
+		},
+		{
+			name:            "range: zero version should stay exact",
+			strategy:        StrategyRange,
+			targetVersion:   "0.0.2",
+			existingVersion: "",
+			want:            "0.0.2",
+		},
+		{
+			name:            "range: zero version range should convert to exact",
+			strategy:        StrategyRange,
+			targetVersion:   ">=0.0.1,<0.0.3",
+			existingVersion: "",
+			want:            "0.0.1",
+		},
+		{
+			name:            "range: zero version with existing higher version",
+			strategy:        StrategyRange,
+			targetVersion:   "0.0.1",
+			existingVersion: "0.0.2",
+			want:            "0.0.2",
+		},
+		{
+			name:            "dynamic: zero version handling",
+			strategy:        StrategyDynamic,
+			targetVersion:   "0.0.1",
+			existingVersion: "0.0.2",
+			want:            "0.0.2",
+		},
+		{
+			name:            "dynamic: zero version range should convert to exact",
+			strategy:        StrategyDynamic,
+			targetVersion:   ">=0.0.1,<0.0.3",
+			existingVersion: "",
+			want:            "0.0.1",
+		},
+		{
+			name:            "dynamic: zero version with higher target",
+			strategy:        StrategyDynamic,
+			targetVersion:   "0.0.3",
+			existingVersion: "0.0.1",
+			want:            "0.0.3",
+		},
+		{
+			name:            "dynamic: zero version range with existing exact",
+			strategy:        StrategyDynamic,
+			targetVersion:   ">=0.0.1,<0.0.3",
+			existingVersion: "0.0.2",
+			want:            "0.0.2",
+		},
+		{
+			name:            "range: zero version range with existing range",
+			strategy:        StrategyRange,
+			targetVersion:   ">=0.0.2,<0.0.4",
+			existingVersion: ">=0.0.1,<0.0.3",
+			want:            "0.0.2",
+		},
+		{
+			name:            "dynamic: zero version with mixed ranges",
+			strategy:        StrategyDynamic,
+			targetVersion:   ">=0.0.1,<0.1.0",
+			existingVersion: ">=0.0.2,<0.0.4",
+			want:            ">= 0.0.2, < 0.0.4",
+		},
+		{
+			name:            "dynamic: complex pre-release ordering",
+			strategy:        StrategyDynamic,
+			targetVersion:   "0.2.0-alpha.1.beta",
+			existingVersion: "0.2.0-alpha.2.beta",
+			want:            "0.2.0-alpha.2.beta", // higher pre-release should be kept
+		},
+		{
+			name:            "dynamic: complex build metadata",
+			strategy:        StrategyDynamic,
+			targetVersion:   "0.2.0+sha.123.branch-feature",
+			existingVersion: "0.2.0+sha.456.branch-main",
+			want:            "0.2.0+sha.123.branch-feature", // target metadata should be used
+		},
+		{
+			name:            "range: mixed pre-release and build in range",
+			strategy:        StrategyRange,
+			targetVersion:   ">=0.2.0-alpha.1+build.123,<0.3.0-beta.2+build.456",
+			existingVersion: "",
+			want:            "0.2.0-alpha.1+build.123", // convert to exact with metadata preserved
+		},
+		{
+			name:            "dynamic: zero version with pre-release and build",
+			strategy:        StrategyDynamic,
+			targetVersion:   "0.0.1-alpha.1+build.123",
+			existingVersion: "0.0.2-beta.1+build.456",
+			want:            "0.0.2-beta.1+build.456", // higher version with metadata preserved
+		},
+		{
+			name:            "range: complex constraints across boundaries",
+			strategy:        StrategyRange,
+			targetVersion:   ">=0.5.0-alpha.1,<1.2.0-beta.1 || >=2.0.0-rc.1,<3.0.0",
+			existingVersion: "",
+			want:            "0.5.0-alpha.1", // pre-1.0 part should be used as exact
+		},
+		{
+			name:            "dynamic: multiple pre-release segments",
+			strategy:        StrategyDynamic,
+			targetVersion:   "0.2.0-alpha.1.beta.2.rc.3",
+			existingVersion: "0.2.0-alpha.1.beta.3.rc.1",
+			want:            "0.2.0-alpha.1.beta.3.rc.1", // complex pre-release comparison
+		},
+		{
+			name:            "range: zero version with complex metadata",
+			strategy:        StrategyRange,
+			targetVersion:   "0.0.1-alpha.1.beta+sha.123.exp.456",
+			existingVersion: "",
+			want:            "0.0.1-alpha.1.beta+sha.123.exp.456", // preserve complex metadata
+		},
+		{
+			name:            "dynamic: mixed zero version ranges with metadata",
+			strategy:        StrategyDynamic,
+			targetVersion:   ">=0.0.1-alpha+build1,<0.0.2-beta+build2",
+			existingVersion: ">=0.0.2-rc+build3,<0.0.3-final+build4",
+			want:            ">= 0.0.2-rc+build3, < 0.0.3-final+build4", // keep higher range with metadata
 		},
 	}
 

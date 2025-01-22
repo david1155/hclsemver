@@ -1,3 +1,22 @@
+## [0.1.4] - 2025-01-22
+
+### Added
+- Comprehensive pre-1.0 version handling:
+  - Keep pre-1.0 exact versions as exact versions by default
+  - Preserve pre-release tags and build metadata
+  - Convert pre-1.0 ranges to exact versions
+  - Handle complex ranges and mixed version formats
+  - Support zero versions (0.0.x) with metadata
+- Enhanced version comparison logic for pre-1.0 versions
+- Added helper functions for consistent pre-1.0 version handling
+- Improved metadata preservation across all strategies
+
+### Bug Fixes
+- Fixed metadata handling in complex version ranges
+- Improved pre-1.0 version comparison logic
+- Enhanced handling of mixed pre-1.0 and post-1.0 versions
+- Fixed edge cases with multiple pre-release segments
+
 ## [0.1.3] - 2024-12-30
 
 ### Bug Fixes
