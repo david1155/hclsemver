@@ -114,17 +114,25 @@ func matchModuleSource(source, pattern string) bool {
 	patternParts := strings.Split(pattern, "/")
 
 	// For each part in the source
-	for i := 0; i <= len(sourceParts)-len(patternParts); i++ {
-		matched := true
-		// Try to match pattern parts with source parts starting at current position
-		for j := 0; j < len(patternParts); j++ {
-			if sourceParts[i+j] != patternParts[j] {
-				matched = false
-				break
-			}
-		}
-		if matched {
+	for i, sourcePart := range sourceParts {
+		// If we have a single pattern part, it can match anywhere
+		if len(patternParts) == 1 && sourcePart == patternParts[0] {
 			return true
+		}
+
+		// For multi-part patterns, check if we have enough remaining parts
+		if len(patternParts) > 1 && i+len(patternParts) <= len(sourceParts) {
+			matched := true
+			// Check if all pattern parts match from this position
+			for j := 0; j < len(patternParts); j++ {
+				if sourceParts[i+j] != patternParts[j] {
+					matched = false
+					break
+				}
+			}
+			if matched {
+				return true
+			}
 		}
 	}
 	return false

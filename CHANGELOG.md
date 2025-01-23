@@ -1,3 +1,13 @@
+## [0.1.6] - 2025-01-23
+
+### Added
+- Support for single wildcard tier configuration
+- Improved handling of wildcard tier inheritance
+
+### Changed
+- Removed debug output from module source matching
+- Improved module source matching logic for better pattern handling
+
 ## [0.1.5] - 2025-01-22
 
 ### Added

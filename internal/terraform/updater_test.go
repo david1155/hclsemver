@@ -555,46 +555,103 @@ func TestMatchModuleSource(t *testing.T) {
 		pattern string
 		want    bool
 	}{
+		// Single segment pattern tests
 		{
-			name:    "exact match",
-			source:  "hashicorp/aws/vpc",
-			pattern: "aws/vpc",
+			name:    "single segment match at start",
+			source:  "foundations-labels-module/google/latest",
+			pattern: "foundations-labels-module",
 			want:    true,
 		},
 		{
-			name:    "match at start",
-			source:  "aws/vpc/module",
-			pattern: "aws/vpc",
+			name:    "single segment match in middle with segments before and after",
+			source:  "api.env0.com/id/foundations-labels-module/google",
+			pattern: "foundations-labels-module",
 			want:    true,
 		},
 		{
-			name:    "match in middle",
-			source:  "registry.terraform.io/aws/vpc/latest",
-			pattern: "aws/vpc",
+			name:    "single segment match in middle",
+			source:  "api.env0.com/xyz/foundations-labels-module/google",
+			pattern: "foundations-labels-module",
 			want:    true,
 		},
 		{
-			name:    "no match - different segments",
-			source:  "api.env0.com/test/foundations-service-account-module/google",
-			pattern: "service-account-module",
+			name:    "single segment match at end",
+			source:  "api.env0.com/xyz/foundations-labels-module",
+			pattern: "foundations-labels-module",
+			want:    true,
+		},
+		{
+			name:    "no match for partial segment",
+			source:  "api.env0.com/my-foundations-labels-module/google",
+			pattern: "foundations-labels-module",
 			want:    false,
 		},
 		{
-			name:    "no match - partial segment",
-			source:  "hashicorp/aws-vpc/module",
-			pattern: "aws",
+			name:    "no match for partial segment at end",
+			source:  "api.env0.com/my-foundations-labels-module",
+			pattern: "foundations-labels-module",
 			want:    false,
 		},
 		{
-			name:    "single segment match",
-			source:  "hashicorp/aws/vpc",
-			pattern: "aws",
+			name:    "no match for partial segment at start",
+			source:  "my-foundations-labels-module/google",
+			pattern: "foundations-labels-module",
+			want:    false,
+		},
+		{
+			name:    "no match when segment is part of larger segment",
+			source:  "api.env0.com/foundations-labels-module-extended/google",
+			pattern: "foundations-labels-module",
+			want:    false,
+		},
+
+		// Multi-segment pattern tests
+		{
+			name:    "multi-segment match at start",
+			source:  "foundations-labels-module/google/latest",
+			pattern: "foundations-labels-module/google",
 			want:    true,
 		},
 		{
-			name:    "case sensitive",
-			source:  "hashicorp/AWS/vpc",
-			pattern: "aws",
+			name:    "multi-segment match in middle",
+			source:  "api.env0.com/foundations-labels-module/google/latest",
+			pattern: "foundations-labels-module/google",
+			want:    true,
+		},
+		{
+			name:    "multi-segment match at end",
+			source:  "api.env0.com/foundations-labels-module/google",
+			pattern: "foundations-labels-module/google",
+			want:    true,
+		},
+		{
+			name:    "no match for wrong second segment",
+			source:  "api.env0.com/foundations-labels-module/aws",
+			pattern: "foundations-labels-module/google",
+			want:    false,
+		},
+		{
+			name:    "no match for segments in wrong order",
+			source:  "api.env0.com/google/foundations-labels-module",
+			pattern: "foundations-labels-module/google",
+			want:    false,
+		},
+		{
+			name:    "no match when segments are not consecutive",
+			source:  "api.env0.com/foundations-labels-module/aws/google",
+			pattern: "foundations-labels-module/google",
+			want:    false,
+		},
+		{
+			name:    "no match when first segment is partial",
+			source:  "api.env0.com/my-foundations-labels-module/google",
+			pattern: "foundations-labels-module/google",
+			want:    false,
+		},
+		{
+			name:    "no match when second segment is partial",
+			source:  "api.env0.com/foundations-labels-module/google-aws",
+			pattern: "foundations-labels-module/google",
 			want:    false,
 		},
 	}
@@ -615,7 +672,7 @@ func TestScanAndUpdateModules_Tiers(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create test directory structure
-	dirs := []string{"dev", "stg", "prd", "other", "random/nested/path", "some/other/location"}
+	dirs := []string{"dev", "stg", "prd", "other", "random/nested/path", "some/other/location", "foundations"}
 	for _, dir := range dirs {
 		err := os.MkdirAll(filepath.Join(tmpDir, dir), 0755)
 		if err != nil {
@@ -654,6 +711,16 @@ module "test" {
 module "test" {
   source  = "hashicorp/test-module/aws"
   version = "1.0.0"
+}`,
+		"foundations/labels.tf": `
+module "labels" {
+  source  = "api.env0.com/foundations-labels-module/google"
+  version = "1.0.0"
+}`,
+		"foundations/pre-release.tf": `
+module "pre_release" {
+  source  = "api.env0.com/foundations-labels-module/google"
+  version = "0.9.0"
 }`,
 	}
 
@@ -734,6 +801,51 @@ module "test" {
 				"other/main.tf": true,
 			},
 		},
+		{
+			name: "foundations labels module with wildcard tier",
+			configTiers: map[string]bool{
+				"*": true,
+			},
+			wantChanged: map[string]bool{
+				"dev/main.tf":                      false,
+				"stg/main.tf":                      false,
+				"prd/main.tf":                      false,
+				"other/main.tf":                    false,
+				"random/nested/path/resources.tf":  false,
+				"some/other/location/terraform.tf": false,
+				"foundations/labels.tf":            true,
+			},
+		},
+		{
+			name: "pre-1.0 version should not convert to range",
+			configTiers: map[string]bool{
+				"*": true,
+			},
+			wantChanged: map[string]bool{
+				"dev/main.tf":                      false,
+				"stg/main.tf":                      false,
+				"prd/main.tf":                      false,
+				"other/main.tf":                    false,
+				"random/nested/path/resources.tf":  false,
+				"some/other/location/terraform.tf": false,
+				"foundations/pre-release.tf":       true,
+			},
+		},
+		{
+			name: "pre-1.0 version should not convert to range",
+			configTiers: map[string]bool{
+				"*": true,
+			},
+			wantChanged: map[string]bool{
+				"dev/main.tf":                      false,
+				"stg/main.tf":                      false,
+				"prd/main.tf":                      false,
+				"other/main.tf":                    false,
+				"random/nested/path/resources.tf":  false,
+				"some/other/location/terraform.tf": false,
+				"foundations/pre-release.tf":       true,
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -776,6 +888,94 @@ module "test" {
 					if shouldChange {
 						if !strings.Contains(string(content), `version = "2.0.0"`) {
 							t.Errorf("File %s: expected version 2.0.0", filePath)
+						}
+					} else {
+						if !strings.Contains(string(content), `version = "1.0.0"`) {
+							t.Errorf("File %s: expected version 1.0.0", filePath)
+						}
+					}
+				}
+				return
+			}
+
+			if tt.name == "foundations labels module with wildcard tier" {
+				// Call ScanAndUpdateModules for foundations-labels-module
+				constraint, err := semver.NewConstraint(">= 3.1.5, < 4.0.0")
+				if err != nil {
+					t.Fatalf("Failed to create version constraint: %v", err)
+				}
+
+				err = ScanAndUpdateModules(
+					tmpDir,
+					"foundations-labels-module",
+					false,      // not exact version
+					nil,        // no exact version
+					constraint, // range constraint
+					">= 3.1.5, < 4.0.0",
+					tt.configTiers,
+					version.StrategyRange,
+					false,
+					false,
+				)
+				if err != nil {
+					t.Fatalf("ScanAndUpdateModules failed: %v", err)
+				}
+
+				// Verify the versions
+				for filePath, shouldChange := range tt.wantChanged {
+					fullPath := filepath.Join(tmpDir, filePath)
+					content, err := os.ReadFile(fullPath)
+					if err != nil {
+						t.Fatalf("Failed to read file: %v", err)
+					}
+
+					if shouldChange {
+						if !strings.Contains(string(content), `version = ">= 3.1.5, < 4.0.0"`) {
+							t.Errorf("File %s: expected version '>= 3.1.5, < 4.0.0'", filePath)
+						}
+					} else {
+						if !strings.Contains(string(content), `version = "1.0.0"`) {
+							t.Errorf("File %s: expected version 1.0.0", filePath)
+						}
+					}
+				}
+				return
+			}
+
+			if tt.name == "pre-1.0 version should not convert to range" {
+				// Call ScanAndUpdateModules for pre-1.0 version
+				constraint, err := semver.NewConstraint(">= 0.9.5, < 1.0.0")
+				if err != nil {
+					t.Fatalf("Failed to create version constraint: %v", err)
+				}
+
+				err = ScanAndUpdateModules(
+					tmpDir,
+					"foundations-labels-module",
+					false,      // not exact version
+					nil,        // no exact version
+					constraint, // range constraint
+					">= 0.9.5, < 1.0.0",
+					tt.configTiers,
+					version.StrategyRange,
+					false,
+					false,
+				)
+				if err != nil {
+					t.Fatalf("ScanAndUpdateModules failed: %v", err)
+				}
+
+				// Verify the versions - for pre-1.0, it should use exact version 0.9.5 instead of range
+				for filePath, shouldChange := range tt.wantChanged {
+					fullPath := filepath.Join(tmpDir, filePath)
+					content, err := os.ReadFile(fullPath)
+					if err != nil {
+						t.Fatalf("Failed to read file: %v", err)
+					}
+
+					if shouldChange {
+						if !strings.Contains(string(content), `version = "0.9.5"`) {
+							t.Errorf("File %s: expected exact version '0.9.5' for pre-1.0, got %s", filePath, content)
 						}
 					} else {
 						if !strings.Contains(string(content), `version = "1.0.0"`) {
