@@ -24,8 +24,30 @@ func processConfig(configFile string, workDir string, dryRun bool) error {
 
 	// Process each module
 	for _, module := range cfg.Modules {
+		// If we only have a wildcard tier, use it
+		if len(module.Versions) == 1 {
+			if versionConfig, err := config.GetEffectiveVersionConfig(module, "*"); err == nil {
+				configTiers["*"] = true
+				strategy := config.GetEffectiveStrategy(module, "*")
+				force := config.GetEffectiveForce(module, "*")
+
+				// Parse the version/range
+				newIsVer, newVer, newConstr, err := version.ParseVersionOrRange(versionConfig.Version)
+				if err != nil {
+					log.Printf("Error parsing version '%s' for module '%s': %v", versionConfig.Version, module.Source, err)
+					continue
+				}
+
+				if err := terraform.ScanAndUpdateModules(workDir, module.Source, newIsVer, newVer, newConstr, versionConfig.Version, configTiers, strategy, dryRun, force); err != nil {
+					return fmt.Errorf("error processing module %s: %w", module.Source, err)
+				}
+				continue
+			}
+		}
+
+		// Process specific tiers
 		for tier, _ := range module.Versions {
-			// Skip the wildcard tier as it's only used for inheritance
+			// Skip the wildcard tier as it's only used for inheritance when we have specific tiers
 			if tier == "*" {
 				continue
 			}
