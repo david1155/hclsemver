@@ -1,3 +1,10 @@
+## [0.1.7] - 2025-01-23
+
+### Changed
+- Improved error handling for malformed HCL files
+- Skip files with parse errors instead of failing
+- Added better token validation and error reporting
+
 ## [0.1.6] - 2025-01-23
 
 ### Added

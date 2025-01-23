@@ -161,7 +161,9 @@ func UpdateModuleVersionInFile(
 	// 2) Parse into AST
 	file, diags := hclwrite.ParseConfig(src, filename, hcl.InitialPos)
 	if diags.HasErrors() {
-		return false, "", "", fmt.Errorf("parse error in %s: %s", filename, diags.Error())
+		// Skip files that can't be parsed instead of failing
+		fmt.Printf("Warning: Skipping file %s due to parse errors: %s\n", filename, diags.Error())
+		return false, "", "", nil
 	}
 
 	changed := false
@@ -181,7 +183,14 @@ func UpdateModuleVersionInFile(
 		}
 
 		sourceTokens := sourceAttr.Expr().BuildTokens(nil)
+		if sourceTokens == nil {
+			continue // Skip if we can't get source tokens
+		}
+
 		sourceValue := strings.Trim(string(sourceTokens.Bytes()), `"`)
+		if sourceValue == "" {
+			continue // Skip if source is empty
+		}
 
 		if !matchModuleSource(sourceValue, oldSourceSubstr) {
 			continue
@@ -190,7 +199,10 @@ func UpdateModuleVersionInFile(
 		// Get existing version if any
 		versionAttr := block.Body().GetAttribute("version")
 		if versionAttr != nil {
-			oldVersion = strings.Trim(strings.TrimSpace(string(versionAttr.Expr().BuildTokens(nil).Bytes())), `"`)
+			versionTokens := versionAttr.Expr().BuildTokens(nil)
+			if versionTokens != nil {
+				oldVersion = strings.Trim(strings.TrimSpace(string(versionTokens.Bytes())), `"`)
+			}
 		} else if !force {
 			// If no version attribute and force is false, output warning and skip
 			fmt.Printf("Warning: Module %q in file %s has no version attribute. Use force flag to add version.\n", sourceValue, filename)
@@ -200,7 +212,8 @@ func UpdateModuleVersionInFile(
 		// Apply version strategy
 		finalVersion, err := version.ApplyVersionStrategy(strategy, newInput, oldVersion)
 		if err != nil {
-			return false, "", "", fmt.Errorf("failed to apply version strategy: %w", err)
+			fmt.Printf("Warning: Failed to apply version strategy for module %q in file %s: %v\n", sourceValue, filename, err)
+			continue // Skip this module but continue processing others
 		}
 		newVersion = finalVersion
 
@@ -223,7 +236,8 @@ func UpdateModuleVersionInFile(
 	if !dryRun {
 		// Write the file back
 		if err := os.WriteFile(filename, file.Bytes(), 0o644); err != nil {
-			return false, "", "", fmt.Errorf("failed to write file %s: %w", filename, err)
+			fmt.Printf("Warning: Failed to write file %s: %v\n", filename, err)
+			return false, "", "", nil // Skip instead of failing
 		}
 	}
 
